@@ -50,16 +50,18 @@ fn main() {
 	let mut i = 0;
 	let mut key = String::new();
 	let mut window = String::new();
-	for next_char in text.chars() {
+	for c in text.chars() {
+		let mut next_char = c;
+
 		// Look at the previous characters (prev_char) up to a max distance 
 		//  of MAX_ORDER. For each order, add statistics for this
 		//  following-character choice (next_char).
 
 		if next_char == '\n' {
-			continue;
+			next_char = ' ';
 		}
 		if next_char == '\r' {
-			continue;
+			next_char = ' ';
 		}
 
 		key.clear();
@@ -101,7 +103,7 @@ fn main() {
 	}
 
 	// Print out stats for the third order:
-	for (key, val) in stats[0].options.iter() {
+	for (key, val) in stats[2].options.iter() {
 		println!("\"{}\":", key);
 
 		for (key2, val2) in val.options.iter() {
