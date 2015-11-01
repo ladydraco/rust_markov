@@ -2,13 +2,14 @@
 use std::fs::File;
 use std::io::Read;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
-const MAX_ORDER: usize = 3;
+const MAX_ORDER: usize = 7;
 
 #[derive(Debug)]
-struct OrderStats {
+struct OrderStats<'a> {
 	total_usages: i32,
-	options: HashMap<String, CharChoiceStats>
+	options: HashMap<&'a str, CharChoiceStats>
 }
 
 #[derive(Debug)]
@@ -19,7 +20,7 @@ struct CharChoiceStats {
 
 fn main() {
 
-	// load text as sting.
+	// Load the text of the book as a sting.
 
 	let text = if let Ok(mut file) = File::open("alice.txt") {
 		let mut file_contents = String::new();
@@ -36,8 +37,8 @@ fn main() {
 	//  characters has been encountered.
 
 	let mut stats: Vec<OrderStats> = Vec::new();
-	for i in 0..MAX_ORDER {
-		let mut order_stats = OrderStats {
+	for _ in 0..MAX_ORDER {
+		let order_stats = OrderStats {
 			total_usages: 0,
 			options: HashMap::new()
 		};
@@ -47,69 +48,79 @@ fn main() {
 	// Iterate input text by character and extract statistics about each
 	//  order as we go.
 
-	let mut i = 0;
-	let mut key = String::new();
-	let mut window = String::new();
-	for c in text.chars() {
-		let mut next_char = c;
+	// A sliding window of length MAX_ORDER + 1 that captures the character offsets
+	//  of current character as well as the past MAX_ORDER characters. This allows
+	//  us to create <&str> representations of strings of the previous 1, 2, ..., MAX_ORDER
+	//  characters, in order to gather statistics about how likely the current character
+	//  is to follow them.
+	let mut window = VecDeque::new();
 
-		// Look at the previous characters (prev_char) up to a max distance 
+	for (offset, next_char) in text.char_indices() {
+
+		// Move the window (so that it includes the current character's offset).
+
+		window.push_front(offset);
+		if window.len() > MAX_ORDER + 1 {
+			window.pop_back();
+		}
+
+		// Look at the previous characters up to a max distance 
 		//  of MAX_ORDER. For each order, add statistics for this
 		//  following-character choice (next_char).
 
-		if next_char == '\n' {
-			next_char = ' ';
-		}
-		if next_char == '\r' {
-			next_char = ' ';
-		}
+		if window.len() > 1 {
+			for i in 1..window.len() {
+				// The order is one less than the slice distance of the key
+				// for that order:
+				let ord = i - 1;
 
-		key.clear();
-		for (ord, prev_char) in window.chars().enumerate() {
-			key.insert(0, prev_char);
-			stats[ord].total_usages += 1;
-			let mut no_match1 = false;
-			if let Some(mut choice_stats) = stats[ord].options.get_mut(&key) {
-				choice_stats.total_usages += 1;
-				let mut no_match2 = false;
-				if let Some(mut char_count) = choice_stats.options.get_mut(&next_char) {
-					*char_count += 1;
+				// Extract a key of length ord:
+				let start = window[i];
+				let end = window[0];
+				let key = &text[start..end];
+				
+				if stats[ord].options.contains_key(key) {
+					let mut choice_stats = stats[ord].options.get_mut(key).unwrap();
+					choice_stats.total_usages += 1;
+
+					if choice_stats.options.contains_key(&next_char) {
+						// We have found another occurrence of next_char following the
+						//  previous sequence of characters (key). Increment the count.
+
+						let mut char_count = choice_stats.options.get_mut(&next_char).unwrap();
+						*char_count += 1;
+					} else {
+						// This is the first occurrence of next_char following this
+						//  sequence of characters (key). Insert a counter for it.
+
+						choice_stats.options.insert(next_char, 1);
+					}
 				} else {
-					no_match2 = true;
-				}
+					// We have found the first occurrence of a string of whatever order
+					//  we are currently handling (ord), in the text. We will create
+					//  a new CharChoiceStats to track single character choices that
+					//  follow this string sequence.
 
-				if no_match2 {
-					choice_stats.options.insert(next_char, 1);
+					let mut char_stats = HashMap::new();
+					char_stats.insert(next_char, 1);
+					let choice_stats = CharChoiceStats {
+						total_usages: 1,
+						options: char_stats
+					};
+					stats[ord].options.insert(key, choice_stats);
 				}
-			} else {
-				no_match1 = true;
-			}
-
-			if no_match1 {
-				let mut char_stats = HashMap::new();
-				char_stats.insert(next_char, 1);
-				let mut choice_stats = CharChoiceStats {
-					total_usages: 1,
-					options: char_stats
-				};
-				stats[ord].options.insert(key.clone(), choice_stats);
 			}
 		}
-
-		move_window(&mut window, &next_char);
-
-		// if i == 200 { break; }
-		// i += 1;
 	}
 
-	// Print out stats for the third order:
-	for (key, val) in stats[2].options.iter() {
-		println!("\"{}\":", key);
+	// Print out stats for the max order:
+	// for (key, val) in stats[MAX_ORDER - 1].options.iter() {
+	// 	println!("\"{}\":", key);
 
-		for (key2, val2) in val.options.iter() {
-			println!("   '{}' -> {}", key2, val2);
-		}
-	}
+	// 	for (key2, val2) in val.options.iter() {
+	// 		println!("   '{}' -> {}", key2, val2);
+	// 	}
+	// }
 
 
 
@@ -123,11 +134,4 @@ fn main() {
 
 
     println!("Done.");
-}
-
-fn move_window(window: &mut String, next_char: & char) {
-	window.insert(0, *next_char);
-	if window.len() > MAX_ORDER {
-		window.pop();
-	}
 }
