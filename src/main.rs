@@ -1,10 +1,15 @@
 
+extern crate rand;
+
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use rand::random;
 
-const MAX_ORDER: usize = 7;
+const MAX_ORDER: usize = 6;
+const OUTPUT_CHARS: usize = 1200;
 
 #[derive(Debug)]
 struct OrderStats<'a> {
@@ -19,6 +24,16 @@ struct CharChoiceStats {
 }
 
 fn main() {
+	let max_order = if let Some(arg) = env::args().nth(1) {
+		if let Ok(argInt) = arg.parse::<usize>() {
+			argInt
+		} else {
+			MAX_ORDER
+		}
+	} else {
+		MAX_ORDER
+	};
+
 
 	// Load the text of the book as a sting.
 
@@ -37,7 +52,7 @@ fn main() {
 	//  characters has been encountered.
 
 	let mut stats: Vec<OrderStats> = Vec::new();
-	for _ in 0..MAX_ORDER {
+	for _ in 0..max_order {
 		let order_stats = OrderStats {
 			total_usages: 0,
 			options: HashMap::new()
@@ -60,7 +75,7 @@ fn main() {
 		// Move the window (so that it includes the current character's offset).
 
 		window.push_front(offset);
-		if window.len() > MAX_ORDER + 1 {
+		if window.len() > max_order + 1 {
 			window.pop_back();
 		}
 
@@ -127,11 +142,31 @@ fn main() {
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
+	let choice_index = (rand::random::<f64>() * ((stats[max_order - 1].options.len() - 1) as f64)) as usize;
+	let mut current = String::from(*stats[max_order - 1].options.keys().nth(choice_index).unwrap());
+	print!("{}", current);
+
 
 
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
+	for _ in 0..(OUTPUT_CHARS - max_order - 1) {
+		let choice_stats = &stats[max_order - 1].options[&current[..]];
+		let total_usages = choice_stats.total_usages - 1;
+		let mut choice_num = ((rand::random::<f64>() * (total_usages as f64)) as i32) + 1;
 
-    println!("Done.");
+		for (next_char, count) in choice_stats.options.iter() {
+			choice_num = choice_num - count;
+
+			if choice_num <= 0 {
+				print!("{}", next_char);
+				current.push(*next_char);
+				current.remove(0);
+				break;
+			}
+		}
+	}
+
+    println!("\nDone.");
 }

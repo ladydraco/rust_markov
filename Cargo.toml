@@ -2,3 +2,6 @@
 name = "rust_markov"
 version = "0.1.0"
 authors = ["GixXer"]
+
+[dependencies]
+rand = "0.3.11"
