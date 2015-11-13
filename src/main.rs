@@ -1,5 +1,6 @@
 
 extern crate rand;
+extern crate num;
 
 use std::env;
 use std::fs::File;
@@ -7,6 +8,7 @@ use std::io::Read;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use rand::random;
+use num::traits::NumCast;
 
 const MAX_ORDER: usize = 6;
 const OUTPUT_CHARS: usize = 1200;
@@ -25,8 +27,8 @@ struct CharChoiceStats {
 
 fn main() {
 	let max_order = if let Some(arg) = env::args().nth(1) {
-		if let Ok(argInt) = arg.parse::<usize>() {
-			argInt
+		if let Ok(arg_int) = arg.parse::<usize>() {
+			arg_int
 		} else {
 			MAX_ORDER
 		}
@@ -142,8 +144,11 @@ fn main() {
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	let choice_index = (rand::random::<f64>() * ((stats[max_order - 1].options.len() - 1) as f64)) as usize;
-	let mut current = String::from(*stats[max_order - 1].options.keys().nth(choice_index).unwrap());
+	let keys_count = stats[max_order - 1].options.len();
+	let choice_index = pick_random_in_range(0, keys_count - 1);
+	let mut current_ord = max_order;
+	let mut current = String::from(*stats[current_ord - 1].options.keys().nth(choice_index).unwrap());
+	let mut change_order_counter = 0;
 	print!("{}", current);
 
 
@@ -151,10 +156,26 @@ fn main() {
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
-	for _ in 0..(OUTPUT_CHARS - max_order - 1) {
-		let choice_stats = &stats[max_order - 1].options[&current[..]];
-		let total_usages = choice_stats.total_usages - 1;
-		let mut choice_num = ((rand::random::<f64>() * (total_usages as f64)) as i32) + 1;
+	for _ in 0..(OUTPUT_CHARS - max_order - 2) {
+		let choice_stats = &stats[current_ord - 1].options[&current[..]];
+		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
+
+		if change_order_counter == 0 {
+			if pick_random_in_range(0, 1) == 0 {
+				if current_ord > 3 {
+					current_ord -= 1;
+				}
+			} else {
+				if current_ord < max_order {
+					current_ord += 1;
+				}
+			}
+			change_order_counter = 0;
+		}
+		else {
+			change_order_counter += 1;
+		}
+
 
 		for (next_char, count) in choice_stats.options.iter() {
 			choice_num = choice_num - count;
@@ -162,11 +183,24 @@ fn main() {
 			if choice_num <= 0 {
 				print!("{}", next_char);
 				current.push(*next_char);
-				current.remove(0);
+				while current.len() > current_ord {
+					current.remove(0);
+				}
 				break;
 			}
 		}
 	}
 
     println!("\nDone.");
+}
+
+fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
+	let start_f = num::cast::<T, f64>(start).unwrap();
+	let end_f = num::cast::<T, f64>(end).unwrap();
+
+	let multiplier = end_f - start_f + 1.0;
+	let r = rand::random::<f64>();
+	let result = multiplier * r;
+	
+	return num::cast::<f64, T>(result).unwrap();
 }
