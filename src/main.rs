@@ -2,16 +2,30 @@
 extern crate rand;
 extern crate num;
 
+use std::cmp;
 use std::env;
 use std::fs::File;
+use std::io::Write;
 use std::io::Read;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use rand::random;
 use num::traits::NumCast;
 
+const INPUT_FILE: &'static str = "alice.txt";
+const OUTPUT_FILE: &'static str = "output.txt";
+const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
 const OUTPUT_CHARS: usize = 1200;
+
+#[derive(Debug)]
+struct Args {
+	input_filename: String,
+	output_filename: String,
+	lower_order_bound: usize,
+	higher_order_bound: usize,
+	output_amount: usize,
+}
 
 #[derive(Debug)]
 struct OrderStats<'a> {
@@ -26,33 +40,80 @@ struct CharChoiceStats {
 }
 
 fn main() {
-	let max_order = if let Some(arg) = env::args().nth(1) {
-		if let Ok(arg_int) = arg.parse::<usize>() {
-			arg_int
-		} else {
-			MAX_ORDER
+	let args = parse_arguments();
+
+	let text = load_book(&args.input_filename);
+	let stats = gather_statistics(&text, args.higher_order_bound);
+
+	generate_text(&stats, &args);
+
+	//debug_stats(&stats[max_order - 1]);
+
+    println!("\nDone.");
+}
+
+#[allow(dead_code)]
+fn debug_stats(stats: &OrderStats) {	
+	// Print out stats:
+	for (key, val) in stats.options.iter() {
+		println!("\"{}\":", key);
+
+		for (key2, val2) in val.options.iter() {
+			println!("   '{}' -> {}", key2, val2);
 		}
-	} else {
-		MAX_ORDER
+	}
+}
+
+fn parse_arguments() -> Args {
+
+	// Initialize args with default values:
+	let mut parsed_args = Args {
+		input_filename: String::from(INPUT_FILE),
+		output_filename: String::from(OUTPUT_FILE),
+		lower_order_bound: MIN_ORDER,
+		higher_order_bound: MAX_ORDER,
+		output_amount: OUTPUT_CHARS
 	};
 
+	for arg in env::args() {
+		match &arg[0..2] {
+			"-i" => parsed_args.input_filename = String::from(&arg[3..]),
+			"-o" => parsed_args.output_filename = String::from(&arg[3..]),
+			"-l" => parsed_args.lower_order_bound = parse_usize_or_default(&arg[3..], MIN_ORDER),
+			"-h" => parsed_args.higher_order_bound = parse_usize_or_default(&arg[3..], MAX_ORDER),
+			"-a" => parsed_args.output_amount = parse_usize_or_default(&arg[3..], OUTPUT_CHARS),
+			_ => (),
+		}
+	}
 
-	// Load the text of the book as a sting.
+	return parsed_args;
+}
 
-	let text = if let Ok(mut file) = File::open("alice.txt") {
+fn parse_usize_or_default(input: &str, default: usize) -> usize {
+	if let Ok(arg_usize) = input.parse::<usize>() {
+		arg_usize
+	} else {
+		default
+	}
+}
+
+// Load the text of the book as a string.
+
+fn load_book(file_name: &str) -> String {
+	if let Ok(mut file) = File::open(file_name) {
 		let mut file_contents = String::new();
 		let _ = file.read_to_string(&mut file_contents);
 		file_contents
 	} else {
 		panic!("Hey dumbass, there was a problem opening file.");
-	};
+	}
+}
 
+// Build statistics which describe the probability of choosing 
+//  a given character after a configurable (MAX_ORDER) number of
+//  characters has been encountered.
 
-
-	// Build statistics which describe the probability of choosing 
-	//  a given character after a configurable (MAX_ORDER) number of
-	//  characters has been encountered.
-
+fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
 	let mut stats: Vec<OrderStats> = Vec::new();
 	for _ in 0..max_order {
 		let order_stats = OrderStats {
@@ -130,43 +191,51 @@ fn main() {
 		}
 	}
 
-	// Print out stats for the max order:
-	// for (key, val) in stats[MAX_ORDER - 1].options.iter() {
-	// 	println!("\"{}\":", key);
+	return stats;
+}
 
-	// 	for (key2, val2) in val.options.iter() {
-	// 		println!("   '{}' -> {}", key2, val2);
-	// 	}
-	// }
+fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 
-
+	let mut output_file = if let Ok(file) = File::create(&args.output_filename) {
+		file
+	} else {
+		panic!("Hey dumbass, there was a problem opening file.");
+	};
 
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	let keys_count = stats[max_order - 1].options.len();
+	let keys_count = stats[args.higher_order_bound - 1].options.len();
 	let choice_index = pick_random_in_range(0, keys_count - 1);
-	let mut current_ord = max_order;
+	let mut current_ord = args.higher_order_bound;
 	let mut current = String::from(*stats[current_ord - 1].options.keys().nth(choice_index).unwrap());
 	let mut change_order_counter = 0;
-	print!("{}", current);
+
+	let _ = output_file.write(current.as_bytes());
+	let mut char_to_write = String::new();
 
 
 
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
-	for _ in 0..(OUTPUT_CHARS - max_order - 2) {
+	let mut total = current.chars().count();
+
+	loop {
+		if total >= args.output_amount {
+			break;
+		}
+
 		let choice_stats = &stats[current_ord - 1].options[&current[..]];
 		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
 
 		if change_order_counter == 0 {
 			if pick_random_in_range(0, 1) == 0 {
-				if current_ord > 3 {
+				if current_ord > args.lower_order_bound {
 					current_ord -= 1;
 				}
 			} else {
-				if current_ord < max_order {
+				if current_ord < args.higher_order_bound {
 					current_ord += 1;
 				}
 			}
@@ -181,9 +250,13 @@ fn main() {
 			choice_num = choice_num - count;
 
 			if choice_num <= 0 {
-				print!("{}", next_char);
+				char_to_write.clear();
+				char_to_write.push(*next_char);
+				let _ = output_file.write(char_to_write.as_bytes());
 				current.push(*next_char);
-				while current.len() > current_ord {
+				total += 1;
+				let remove_count = cmp::max(current.chars().count() - current_ord, 0);
+				for _ in 0..remove_count {
 					current.remove(0);
 				}
 				break;
@@ -191,7 +264,7 @@ fn main() {
 		}
 	}
 
-    println!("\nDone.");
+	let _ = output_file.flush();
 }
 
 fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
