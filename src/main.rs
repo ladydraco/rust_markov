@@ -4,6 +4,7 @@ extern crate num;
 
 use std::cmp;
 use std::env;
+use std::process;
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
@@ -82,11 +83,23 @@ fn parse_arguments() -> Args {
 			"-l" => parsed_args.lower_order_bound = parse_usize_or_default(&arg[3..], MIN_ORDER),
 			"-h" => parsed_args.higher_order_bound = parse_usize_or_default(&arg[3..], MAX_ORDER),
 			"-a" => parsed_args.output_amount = parse_usize_or_default(&arg[3..], OUTPUT_CHARS),
+			"-?" => print_help(),
 			_ => (),
 		}
 	}
 
 	return parsed_args;
+}
+
+fn print_help() {
+	println!("Arguments: ");
+	println!(" -i: input filename.");
+	println!(" -o: output filename.");
+	println!(" -l: low order bound (minimum order to use).");
+	println!(" -h: high order bound (maximum order to use).");
+	println!(" -a: amount of generated output in characters.");
+	println!(" -?: print help.");
+	process::exit(1);
 }
 
 fn parse_usize_or_default(input: &str, default: usize) -> usize {
