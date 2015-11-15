@@ -2,16 +2,21 @@
 extern crate rand;
 extern crate num;
 
+mod generate_stats;
+
 use std::cmp;
 use std::env;
 use std::process;
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
-use std::collections::HashMap;
-use std::collections::VecDeque;
 use rand::random;
 use num::traits::NumCast;
+use generate_stats::{
+	OrderStats,
+	CharChoiceStats,
+	gather_statistics,
+	};
 
 const INPUT_FILE: &'static str = "alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
@@ -39,52 +44,6 @@ struct Args {
 	lower_order_bound: usize,
 	higher_order_bound: usize,
 	output_amount: usize,
-}
-
-#[derive(Debug)]
-struct OrderStats<'a> {
-	total_usages: i32,
-	stats_for_state: HashMap<&'a str, CharChoiceStats>
-}
-
-impl<'a> OrderStats<'a> {
-	fn add_stats(& mut self, key: &'a str, next_char: char) {
-		self.total_usages += 1;
-
-		if !self.stats_for_state.contains_key(key) {
-			let choice_stats = CharChoiceStats {
-				total_usages: 0,
-				options: HashMap::new()
-			};
-			self.stats_for_state.insert(key, choice_stats);
-		}
-
-		let mut choice_stats = self.stats_for_state.get_mut(key).unwrap();
-		choice_stats.add_option(next_char);
-	}
-}
-
-#[derive(Debug)]
-struct CharChoiceStats {
-	total_usages: i32,
-	options: HashMap<char, i32>
-}
-
-trait AddOption<T> {
-	fn add_option(& mut self, T);
-}
-
-impl AddOption<char> for CharChoiceStats {
-	fn add_option(& mut self, option: char) {
-		self.total_usages += 1;
-
-		if !self.options.contains_key(&option) {
-			self.options.insert(option, 0);
-		}
-
-		let mut char_count = self.options.get_mut(&option).unwrap();
-		*char_count += 1;
-	}
 }
 
 #[allow(dead_code)]
@@ -156,60 +115,13 @@ fn load_book(file_name: &str) -> String {
 	}
 }
 
-// Build statistics which describe the probability of choosing 
-//  a given character after a configurable (MAX_ORDER) number of
-//  characters has been encountered.
-
-fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
-	let mut stats: Vec<OrderStats> = Vec::new();
-	for _ in 0..max_order {
-		let order_stats = OrderStats {
-			total_usages: 0,
-			stats_for_state: HashMap::new()
-		};
-		stats.push(order_stats);
-	}
-
-	// Iterate input text by character and extract statistics about each
-	//  order as we go.
-
-	// A sliding window of length MAX_ORDER + 1 that captures the character offsets
-	//  of current character as well as the past MAX_ORDER characters. This allows
-	//  us to create <&str> representations of strings of the previous 1, 2, ..., MAX_ORDER
-	//  characters, in order to gather statistics about how likely the current character
-	//  is to follow them.
-	let mut window = VecDeque::new();
-
-	for (offset, next_char) in text.char_indices() {
-
-		// Move the window (so that it includes the current character's offset).
-
-		window.push_front(offset);
-		if window.len() > max_order + 1 {
-			window.pop_back();
-		}
-
-		// Look at the previous characters up to a max distance 
-		//  of MAX_ORDER. For each order, add statistics for this
-		//  following-character choice (next_char).
-
-		if window.len() > 1 {
-			for i in 1..window.len() {
-				// The order is one less than the slice distance of the key
-				// for that order:
-				let ord = i - 1;
-
-				// Extract a key of length ord:
-				let start = window[i];
-				let end = window[0];
-				let key = &text[start..end];
-				
-				stats[ord].add_stats(key, next_char);
-			}
-		}
-	}
-
-	return stats;
+struct Generator<'a, 'b> {
+	output_file: &'a mut File,
+	stats: &'b Vec<OrderStats<'b>>,
+	current: String,
+	current_order: usize,
+	total: usize,
+	change_order_counter: i32,
 }
 
 fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
@@ -219,37 +131,39 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 		panic!("Hey dumbass, there was a problem opening file.");
 	};
 
+	let mut generator = Generator {
+		output_file: &mut output_file,
+		stats: &stats,
+		current: String::new(),
+		current_order: args.higher_order_bound,
+		total: 0,
+		change_order_counter: 0,
+	};
+
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	let keys_count = stats[args.higher_order_bound - 1].stats_for_state.len();
+	let keys_count = generator.stats[args.higher_order_bound - 1].stats_for_state.len();
 	let choice_index = pick_random_in_range(0, keys_count - 1);
-	let mut current_ord = args.higher_order_bound;
-	let mut current = String::from(*stats[current_ord - 1].stats_for_state.keys().nth(choice_index).unwrap());
-	let mut change_order_counter = 0;
+	generator.current.push_str(*generator.stats[generator.current_order - 1].stats_for_state.keys().nth(choice_index).unwrap());
 
-	let _ = output_file.write(current.as_bytes());
+	let _ = generator.output_file.write(generator.current.as_bytes());
 
 
 
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
-	let mut total = current.chars().count();
+	generator.total += generator.current.chars().count();
 
-	loop {
-		if total >= args.output_amount {
-			break;
-		}
+	while generator.total < args.output_amount {
+		let choice_stats = &generator.stats[generator.current_order - 1].stats_for_state[&generator.current[..]];
 
-		let choice_stats = &stats[current_ord - 1].stats_for_state[&current[..]];
-
-		update_order_used(&args, &mut change_order_counter, &mut current_ord);
-		generate_next_character(&choice_stats, &current_ord, &mut current, &mut output_file, &mut total);
-		
+		update_order_used(&args, &mut generator.change_order_counter, &mut generator.current_order);
+		generate_next_character(&choice_stats, &generator.current_order, &mut generator.current, &mut generator.output_file, &mut generator.total);
 	}
 
-	let _ = output_file.flush();
+	let _ = generator.output_file.flush();
 }
 
 fn update_order_used(args: &Args, change_order_counter: &mut i32, current_ord: &mut usize) {
