@@ -44,22 +44,22 @@ struct Args {
 #[derive(Debug)]
 struct OrderStats<'a> {
 	total_usages: i32,
-	previous_chars: HashMap<&'a str, CharChoiceStats>
+	stats_for_state: HashMap<&'a str, CharChoiceStats>
 }
 
 impl<'a> OrderStats<'a> {
 	fn add_stats(& mut self, key: &'a str, next_char: char) {
 		self.total_usages += 1;
 
-		if !self.previous_chars.contains_key(key) {
+		if !self.stats_for_state.contains_key(key) {
 			let choice_stats = CharChoiceStats {
 				total_usages: 0,
 				options: HashMap::new()
 			};
-			self.previous_chars.insert(key, choice_stats);
+			self.stats_for_state.insert(key, choice_stats);
 		}
 
-		let mut choice_stats = self.previous_chars.get_mut(key).unwrap();
+		let mut choice_stats = self.stats_for_state.get_mut(key).unwrap();
 		choice_stats.add_option(next_char);
 	}
 }
@@ -90,7 +90,7 @@ impl AddOption<char> for CharChoiceStats {
 #[allow(dead_code)]
 fn debug_stats(stats: &OrderStats) {	
 	// Print out stats:
-	for (key, val) in stats.previous_chars.iter() {
+	for (key, val) in stats.stats_for_state.iter() {
 		println!("\"{}\":", key);
 
 		for (key2, val2) in val.options.iter() {
@@ -165,7 +165,7 @@ fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
 	for _ in 0..max_order {
 		let order_stats = OrderStats {
 			total_usages: 0,
-			previous_chars: HashMap::new()
+			stats_for_state: HashMap::new()
 		};
 		stats.push(order_stats);
 	}
@@ -222,10 +222,10 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	let keys_count = stats[args.higher_order_bound - 1].previous_chars.len();
+	let keys_count = stats[args.higher_order_bound - 1].stats_for_state.len();
 	let choice_index = pick_random_in_range(0, keys_count - 1);
 	let mut current_ord = args.higher_order_bound;
-	let mut current = String::from(*stats[current_ord - 1].previous_chars.keys().nth(choice_index).unwrap());
+	let mut current = String::from(*stats[current_ord - 1].stats_for_state.keys().nth(choice_index).unwrap());
 	let mut change_order_counter = 0;
 
 	let _ = output_file.write(current.as_bytes());
@@ -242,7 +242,7 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 			break;
 		}
 
-		let choice_stats = &stats[current_ord - 1].previous_chars[&current[..]];
+		let choice_stats = &stats[current_ord - 1].stats_for_state[&current[..]];
 
 		update_order_used(&args, &mut change_order_counter, &mut current_ord);
 		generate_next_character(&choice_stats, &current_ord, &mut current, &mut output_file, &mut total);
