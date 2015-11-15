@@ -247,22 +247,7 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 		let choice_stats = &stats[current_ord - 1].previous_chars[&current[..]];
 		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
 
-		if change_order_counter == 0 {
-			if pick_random_in_range(0, 1) == 0 {
-				if current_ord > args.lower_order_bound {
-					current_ord -= 1;
-				}
-			} else {
-				if current_ord < args.higher_order_bound {
-					current_ord += 1;
-				}
-			}
-			change_order_counter = 0;
-		}
-		else {
-			change_order_counter += 1;
-		}
-
+		update_order_used(&args, &mut change_order_counter, &mut current_ord);
 
 		for (next_char, count) in choice_stats.options.iter() {
 			choice_num = choice_num - count;
@@ -283,6 +268,24 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 	}
 
 	let _ = output_file.flush();
+}
+
+fn update_order_used(args: &Args, change_order_counter: &mut i32, current_ord: &mut usize) {
+	if *change_order_counter == 0 {
+		if pick_random_in_range(0, 1) == 0 {
+			if *current_ord > args.lower_order_bound {
+				*current_ord -= 1;
+			}
+		} else {
+			if *current_ord < args.higher_order_bound {
+				*current_ord += 1;
+			}
+		}
+		*change_order_counter = 0;
+	}
+	else {
+		*change_order_counter += 1;
+	}
 }
 
 fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
