@@ -19,27 +19,6 @@ const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
 const OUTPUT_CHARS: usize = 1200;
 
-#[derive(Debug)]
-struct Args {
-	input_filename: String,
-	output_filename: String,
-	lower_order_bound: usize,
-	higher_order_bound: usize,
-	output_amount: usize,
-}
-
-#[derive(Debug)]
-struct OrderStats<'a> {
-	total_usages: i32,
-	options: HashMap<&'a str, CharChoiceStats>
-}
-
-#[derive(Debug)]
-struct CharChoiceStats {
-	total_usages: i32,
-	options: HashMap<char, i32>
-}
-
 fn main() {
 	let args = parse_arguments();
 
@@ -53,10 +32,65 @@ fn main() {
     println!("\nDone.");
 }
 
+#[derive(Debug)]
+struct Args {
+	input_filename: String,
+	output_filename: String,
+	lower_order_bound: usize,
+	higher_order_bound: usize,
+	output_amount: usize,
+}
+
+#[derive(Debug)]
+struct OrderStats<'a> {
+	total_usages: i32,
+	previous_chars: HashMap<&'a str, CharChoiceStats>
+}
+
+impl<'a> OrderStats<'a> {
+	fn add_stats(& mut self, key: &'a str, next_char: char) {
+		self.total_usages += 1;
+
+		if !self.previous_chars.contains_key(key) {
+			let choice_stats = CharChoiceStats {
+				total_usages: 0,
+				options: HashMap::new()
+			};
+			self.previous_chars.insert(key, choice_stats);
+		}
+
+		let mut choice_stats = self.previous_chars.get_mut(key).unwrap();
+		choice_stats.add_option(next_char);
+	}
+}
+
+#[derive(Debug)]
+struct CharChoiceStats {
+	total_usages: i32,
+	options: HashMap<char, i32>
+}
+
+trait AddOption<T> {
+	fn add_option(& mut self, T);
+}
+
+impl AddOption<char> for CharChoiceStats {
+	fn add_option(& mut self, option: char) {
+		self.total_usages += 1;
+
+		if !self.options.contains_key(&option) {
+			self.options.insert(option, 0);
+		}
+
+		let mut char_count = self.options.get_mut(&option).unwrap();
+		*char_count += 1;
+	}
+}
+
 #[allow(dead_code)]
 fn debug_stats(stats: &OrderStats) {	
 	// Print out stats:
-	for (key, val) in stats.options.iter() {
+	for (key, val) in stats.previous_chars.iter() {
 		println!("\"{}\":", key);
 
 		for (key2, val2) in val.options.iter() {
@@ -131,7 +165,7 @@ fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
 	for _ in 0..max_order {
 		let order_stats = OrderStats {
 			total_usages: 0,
-			options: HashMap::new()
+			previous_chars: HashMap::new()
 		};
 		stats.push(order_stats);
 	}
@@ -170,36 +204,7 @@ fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
 				let end = window[0];
 				let key = &text[start..end];
 				
-				if stats[ord].options.contains_key(key) {
-					let mut choice_stats = stats[ord].options.get_mut(key).unwrap();
-					choice_stats.total_usages += 1;
-
-					if choice_stats.options.contains_key(&next_char) {
-						// We have found another occurrence of next_char following the
-						//  previous sequence of characters (key). Increment the count.
-
-						let mut char_count = choice_stats.options.get_mut(&next_char).unwrap();
-						*char_count += 1;
-					} else {
-						// This is the first occurrence of next_char following this
-						//  sequence of characters (key). Insert a counter for it.
-
-						choice_stats.options.insert(next_char, 1);
-					}
-				} else {
-					// We have found the first occurrence of a string of whatever order
-					//  we are currently handling (ord), in the text. We will create
-					//  a new CharChoiceStats to track single character choices that
-					//  follow this string sequence.
-
-					let mut char_stats = HashMap::new();
-					char_stats.insert(next_char, 1);
-					let choice_stats = CharChoiceStats {
-						total_usages: 1,
-						options: char_stats
-					};
-					stats[ord].options.insert(key, choice_stats);
-				}
+				stats[ord].add_stats(key, next_char);
 			}
 		}
 	}
@@ -218,10 +223,10 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	let keys_count = stats[args.higher_order_bound - 1].options.len();
+	let keys_count = stats[args.higher_order_bound - 1].previous_chars.len();
 	let choice_index = pick_random_in_range(0, keys_count - 1);
 	let mut current_ord = args.higher_order_bound;
-	let mut current = String::from(*stats[current_ord - 1].options.keys().nth(choice_index).unwrap());
+	let mut current = String::from(*stats[current_ord - 1].previous_chars.keys().nth(choice_index).unwrap());
 	let mut change_order_counter = 0;
 
 	let _ = output_file.write(current.as_bytes());
@@ -239,7 +244,7 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 			break;
 		}
 
-		let choice_stats = &stats[current_ord - 1].options[&current[..]];
+		let choice_stats = &stats[current_ord - 1].previous_chars[&current[..]];
 		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
 
 		if change_order_counter == 0 {
