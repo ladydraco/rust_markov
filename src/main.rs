@@ -230,7 +230,6 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 	let mut change_order_counter = 0;
 
 	let _ = output_file.write(current.as_bytes());
-	let mut char_to_write = String::new();
 
 
 
@@ -245,26 +244,10 @@ fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
 		}
 
 		let choice_stats = &stats[current_ord - 1].previous_chars[&current[..]];
-		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
 
 		update_order_used(&args, &mut change_order_counter, &mut current_ord);
-
-		for (next_char, count) in choice_stats.options.iter() {
-			choice_num = choice_num - count;
-
-			if choice_num <= 0 {
-				char_to_write.clear();
-				char_to_write.push(*next_char);
-				let _ = output_file.write(char_to_write.as_bytes());
-				current.push(*next_char);
-				total += 1;
-				let remove_count = cmp::max(current.chars().count() - current_ord, 0);
-				for _ in 0..remove_count {
-					current.remove(0);
-				}
-				break;
-			}
-		}
+		generate_next_character(&choice_stats, &current_ord, &mut current, &mut output_file, &mut total);
+		
 	}
 
 	let _ = output_file.flush();
@@ -285,6 +268,25 @@ fn update_order_used(args: &Args, change_order_counter: &mut i32, current_ord: &
 	}
 	else {
 		*change_order_counter += 1;
+	}
+}
+
+fn generate_next_character(choice_stats: &CharChoiceStats, current_ord: &usize, current: &mut String, output_file: &mut File, total: &mut usize) {
+	let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
+
+	for (next_char, count) in choice_stats.options.iter() {
+		choice_num = choice_num - count;
+
+		if choice_num <= 0 {
+			let _ = output_file.write(next_char.to_string().as_bytes());
+			current.push(*next_char);
+			*total += 1;
+			let remove_count = cmp::max(current.chars().count() - *current_ord, 0);
+			for _ in 0..remove_count {
+				current.remove(0);
+			}
+			break;
+		}
 	}
 }
 
