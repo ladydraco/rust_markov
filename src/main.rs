@@ -27,7 +27,7 @@ fn main() {
 
 	generate_text(&stats, &args);
 
-	//debug_stats(&stats[max_order - 1]);
+	// debug_stats(&stats[args.higher_order_bound - 1]);
 
     println!("\nDone.");
 }
@@ -213,7 +213,6 @@ fn gather_statistics(text: &str, max_order: usize) -> Vec<OrderStats> {
 }
 
 fn generate_text(stats: &Vec<OrderStats>, args: &Args) {
-
 	let mut output_file = if let Ok(file) = File::create(&args.output_filename) {
 		file
 	} else {
