@@ -6,12 +6,13 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use rand::random;
 use num::traits::NumCast;
 
 const MAX_ORDER: usize = 6;
-const OUTPUT_CHARS: usize = 1200;
+const OUTPUT_CHARS: usize = 800;
 
 #[derive(Debug)]
 struct OrderStats<'a> {
@@ -23,6 +24,12 @@ struct OrderStats<'a> {
 struct CharChoiceStats {
 	total_usages: i32,
 	options: HashMap<char, i32>
+}
+
+#[derive(Debug)]
+struct SentenceChoiceStats {
+	total_usages: i32,
+	options: HashMap<i32, i32>
 }
 
 fn main() {
@@ -64,6 +71,26 @@ fn main() {
 
 	// Iterate input text by character and extract statistics about each
 	//  order as we go.
+
+	let mut sentences: Vec<&str> = Vec::new();
+	let mut current_word_count = 0;
+	let mut in_word = false;
+	let mut sentence_start = -1;
+
+	let mid_word_punctuation = {
+		let mut mid_word_punctuation = HashSet::new();
+		mid_word_punctuation.insert('\'');
+		mid_word_punctuation.insert('-');
+		mid_word_punctuation
+	};
+
+	let sentence_enders = {
+		let mut sentence_enders = HashSet::new();
+		sentence_enders.insert('.');
+		sentence_enders.insert('!');
+		sentence_enders.insert('?');
+		sentence_enders
+	};
 
 	// A sliding window of length MAX_ORDER + 1 that captures the character offsets
 	//  of current character as well as the past MAX_ORDER characters. This allows
@@ -128,6 +155,33 @@ fn main() {
 				}
 			}
 		}
+
+		// Collect stats about sentence lengths and mark the beginning
+		//  of sentences.
+
+		if next_char.is_alphabetic() {
+			if !in_word {
+				in_word = true;
+			}
+			if sentence_start == -1 {
+				sentence_start = offset;
+				current_word_count = 0;
+			}
+		} else {
+			if in_word {
+				in_word = false;
+				current_word_count += 1;
+			}
+			if sentence_enders.contains(&next_char) {
+				if sentence_start != -1 {
+					sentences.push(&text[sentence_start..offset+next_char.len_utf8()]);
+					sentence_start = -1;
+				}
+			}
+			if next_char == '\n' {
+				sentence_start = -1;
+			}
+		}
 	}
 
 	// Print out stats for the max order:
@@ -136,6 +190,17 @@ fn main() {
 
 	// 	for (key2, val2) in val.options.iter() {
 	// 		println!("   '{}' -> {}", key2, val2);
+	// 	}
+	// }
+
+	// println!("{}", sentences.len());
+	// let mut i = 0;
+	// for s in sentences.iter() {
+	// 	println!("{}", s);
+	// 	println!("----");
+	// 	i += 1;
+	// 	if i == 20 {
+	// 		break;
 	// 	}
 	// }
 
@@ -149,7 +214,7 @@ fn main() {
 	let mut current_ord = max_order;
 	let mut current = String::from(*stats[current_ord - 1].options.keys().nth(choice_index).unwrap());
 	let mut change_order_counter = 0;
-	print!("{}", current);
+	// print!("{}", current);
 
 
 
@@ -157,6 +222,8 @@ fn main() {
 	//  following random paths through the generated statistics.
 
 	for _ in 0..(OUTPUT_CHARS - max_order - 2) {
+		break;
+
 		let choice_stats = &stats[current_ord - 1].options[&current[..]];
 		let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
 
