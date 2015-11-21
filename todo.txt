@@ -1,0 +1,10 @@
+
+ Todo:
+  - Collect stats about success rate on imposing structure.
+  - Prototype allowing multiple attempts at decision points to get what we want.
+  - Collect more statistics:
+     - Paragraph
+     - Chapter
+     - Quotation
+     - Parenthetical
+  

@@ -12,8 +12,8 @@ use gather_stats::{
 	Stats,
 	OrderStats,
 	CharChoiceStats,
-	SentenceWatcher,
 	};
+use sentence_watcher::SentenceWatcher;
 
 #[derive(Debug)]
 pub struct Args {
@@ -166,11 +166,11 @@ impl<'a> Generator<'a> {
 				self.distortions.total_usages += new_count - count;
 				self.distortions.options.insert(*char_choice, new_count);
 			}
-			if *char_choice == '\n' {
-				let new_count = (*count as f64 * 0.01).ceil() as i32;
-				self.distortions.total_usages += new_count - count;
-				self.distortions.options.insert(*char_choice, new_count);
-			}
+			// if *char_choice == '\n' {
+			// 	let new_count = (*count as f64 * 0.01).ceil() as i32;
+			// 	self.distortions.total_usages += new_count - count;
+			// 	self.distortions.options.insert(*char_choice, new_count);
+			// }
 		}
 	}
 
@@ -196,13 +196,12 @@ impl<'a> Generator<'a> {
 				}
 
 				if let Some(word_count) = self.sentence_watcher.watch(*next_char) {
-					if word_count < self.current_sentence_length {
-						println!("Too short by: {}", self.current_sentence_length - word_count);
-					} else if word_count > self.current_sentence_length {
-						println!("Too long by: {}", word_count - self.current_sentence_length);
-					} else {
-						println!("Correct sentence length! Huzzah!");
-					}
+
+					let diff = num::abs(word_count - self.current_sentence_length) as f64;
+					let total = self.current_sentence_length as f64;
+					let percent = ((diff / total) * 100.0) as i32;
+					println!("sentence error percent: {}%", percent);
+
 					if self.total >= self.output_amount {
 						let _ = self.output_file.flush();
     					println!("\nDone.");

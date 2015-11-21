@@ -4,6 +4,7 @@ extern crate num;
 
 mod gather_stats;
 mod generate_text;
+mod sentence_watcher;
 
 use std::env;
 use std::process;
