@@ -29,6 +29,12 @@ impl SentenceWatcher {
 			enders: enders
 		}
 	}
+	pub fn sync(&mut self, target: &SentenceWatcher) {
+		self.word_count = target.word_count;
+		self.in_word = target.in_word;
+		self.start = target.start;
+		self.previous_length = target.previous_length;
+	}
 	pub fn watch_for_stats(&mut self, offset: usize, next_char: char) -> Option<(i32, usize, Option<i32>)> {
 		let mut sentence_ended = None;
 		if next_char.is_alphabetic() {
@@ -53,6 +59,7 @@ impl SentenceWatcher {
 			}
 			if next_char == '\n' {
 				self.start = None;
+				self.word_count = 0;
 			}
 		}
 		return sentence_ended;

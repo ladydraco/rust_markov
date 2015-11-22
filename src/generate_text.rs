@@ -1,8 +1,5 @@
 
 use std::cmp;
-use std::process;
-use std::fs::File;
-use std::io::Write;
 use std::collections::HashMap;
 use rand;
 use rand::random;
@@ -21,35 +18,48 @@ pub struct Args {
 	pub output_filename: String,
 	pub lower_order_bound: usize,
 	pub higher_order_bound: usize,
+	pub max_tries: usize,
+	pub distortion_factor: i32,
 	pub output_amount: usize,
 	pub use_html: bool
 }
 
+#[derive(Copy, Clone)]
+pub enum TextEvent {
+	CharGenerated,
+	OutputComplete,
+	SentenceComplete(i32), // Contains word count of completed sentence.
+}
+
 pub struct Generator<'a> {
-	output_file: File,
-	output_amount: usize,
+	// immutables:
 	stats: &'a Stats<'a>,
+	max_order: usize,
+	min_order: usize,
+	output_amount: usize,
+	use_html: bool,
+	distortion_factor: i32,
+
+	// output:
+	output_buffer: String,
+
+	// current state:
 	current: String,
 	current_order: usize,
 	total: usize,
 	change_order_counter: i32,
-	current_sentence_length: i32,
 	distortions: CharChoiceStats,
 	sentence_watcher: SentenceWatcher,
-	use_html: bool,
+	pub current_sentence_length: i32,
 }
 
 impl<'a> Generator<'a> {
 	pub fn new(args: &Args, stats: &'a Stats<'a>) -> Generator<'a> {
-		let mut output_file = if let Ok(file) = File::create(&args.output_filename) {
-			file
-		} else {
-			panic!("There was a problem opening the output file.");
-		};
+		let mut output_buffer = String::new();
 
 		if args.use_html {
-			let _ = output_file.write("<meta charset=\"UTF-8\">".as_bytes());
-			let _ = output_file.write("<style type=\"text/css\"> body { white-space: pre-wrap; } ".as_bytes());
+			output_buffer.push_str("<meta charset=\"UTF-8\">");
+			output_buffer.push_str("<style type=\"text/css\"> body { white-space: pre-wrap; } ");
 			for i in args.lower_order_bound..args.higher_order_bound + 1 {
 				
 				let a = args.higher_order_bound + 1 - args.lower_order_bound;
@@ -58,27 +68,33 @@ impl<'a> Generator<'a> {
 				let multiplier = c as f64 / a as f64;
 
 				let value = (multiplier * 248.0) as i32;
-				let _ = output_file.write(".order-".as_bytes());
-				let _ = output_file.write(i.to_string().as_bytes());
-				let _ = output_file.write("{ ".as_bytes());
+				output_buffer.push_str(".order-");
+				output_buffer.push_str(&i.to_string());
+				output_buffer.push_str("{ ");
 
-				let _ = output_file.write(" color: rgb(".as_bytes());
-				let _ = output_file.write(value.to_string().as_bytes());
-				let _ = output_file.write(",".as_bytes());
-				let _ = output_file.write(value.to_string().as_bytes());
-				let _ = output_file.write(",".as_bytes());
-				let _ = output_file.write(value.to_string().as_bytes());
-				let _ = output_file.write(");\n".as_bytes());
+				output_buffer.push_str(" color: rgb(");
+				output_buffer.push_str(&value.to_string());
+				output_buffer.push_str(",");
+				output_buffer.push_str(&value.to_string());
+				output_buffer.push_str(",");
+				output_buffer.push_str(&value.to_string());
+				output_buffer.push_str(");\n");
 
-				let _ = output_file.write("}\n".as_bytes());
+				output_buffer.push_str("}\n");
 			}
-			let _ = output_file.write("</style>".as_bytes());
+			output_buffer.push_str("</style>");
 		}
 
-		let mut generator = Generator {
-			output_file: output_file,
-			output_amount: args.output_amount,
+		let generator = Generator {
 			stats: stats,
+			max_order: args.higher_order_bound,
+			min_order: args.lower_order_bound,
+			output_amount: args.output_amount,
+			use_html: args.use_html,
+			distortion_factor: args.distortion_factor,
+
+			output_buffer: output_buffer,
+
 			current: String::new(),
 			current_order: args.higher_order_bound,
 			total: 0,
@@ -88,19 +104,31 @@ impl<'a> Generator<'a> {
 				total_usages: 0,
 				options: HashMap::new()
 			},
-			sentence_watcher: SentenceWatcher::new(),
-			use_html: args.use_html
+			sentence_watcher: SentenceWatcher::new()
 		};
 
-		generator.start();
-
 		return generator;
+	}
+
+	pub fn sync(&mut self, target: &Generator) {
+		self.output_buffer.clear();
+		self.current.clear();
+
+		self.output_buffer.push_str(&target.output_buffer);
+		self.current.push_str(&target.current);
+
+		self.current_order = target.current_order;
+		self.total = target.total;
+		self.change_order_counter = target.change_order_counter;
+		self.current_sentence_length = target.current_sentence_length;
+
+		self.sentence_watcher.sync(&target.sentence_watcher);
 	}
 
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	fn start(&mut self) {
+	pub fn start(&mut self) {
 		let sentence_starts = &self.stats.sentence_stats.starts;
 		let mut choice_index = pick_random_in_range(0, sentence_starts.len() - 1);
 		while sentence_starts[choice_index].chars().next().unwrap().is_lowercase() {
@@ -125,24 +153,47 @@ impl<'a> Generator<'a> {
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
-	pub fn generate_text(&mut self, args: &Args) {
+	#[allow(dead_code)]
+	pub fn generate_text(&mut self) {
 		loop {
 			let choice_stats = &self.stats.char_stats[self.current_order - 1].stats_for_state[&self.current[..]];
 
-			self.update_order_used(&args);
+			self.update_order_used();
 			self.calculate_distortions(&choice_stats);
 			self.generate_next_character(&choice_stats);
 		}
 	}
 
-	fn update_order_used(&mut self, args: &Args) {
+	pub fn generate_sentence(&mut self) -> TextEvent {
+		loop {
+			let choice_stats = &self.stats.char_stats[self.current_order - 1].stats_for_state[&self.current[..]];
+
+			self.update_order_used();
+			self.calculate_distortions(&choice_stats);
+			let event = self.generate_next_character(&choice_stats);
+
+			match event {
+				TextEvent::OutputComplete => return event,
+				TextEvent::SentenceComplete(_) => return event,
+				_ => continue,
+			}
+		}
+	}
+
+	pub fn pop_buffer_conents(&mut self) -> String {
+		let contents = self.output_buffer.clone();
+		self.output_buffer.clear();
+		return contents;
+	}
+
+	fn update_order_used(&mut self) {
 		if self.change_order_counter == 0 {
 			if pick_random_in_range(0, 1) == 0 {
-				if self.current_order > args.lower_order_bound {
+				if self.current_order > self.min_order {
 					self.current_order -= 1;
 				}
 			} else {
-				if self.current_order < args.higher_order_bound {
+				if self.current_order < self.max_order {
 					self.current_order += 1;
 				}
 			}
@@ -159,9 +210,9 @@ impl<'a> Generator<'a> {
 		for (char_choice, count) in choice_stats.options.iter() {
 			if self.sentence_watcher.enders.contains(char_choice) {
 				let new_count = if self.current_sentence_length > self.sentence_watcher.word_count {
-					(*count as f64 * 0.01).ceil() as i32
+					(*count as f64 / self.distortion_factor as f64).ceil() as i32
 				} else {
-					count * 100
+					count * self.distortion_factor
 				};
 				self.distortions.total_usages += new_count - count;
 				self.distortions.options.insert(*char_choice, new_count);
@@ -174,7 +225,7 @@ impl<'a> Generator<'a> {
 		}
 	}
 
-	fn generate_next_character(&mut self, choice_stats: &CharChoiceStats) {
+	fn generate_next_character(&mut self, choice_stats: &CharChoiceStats) -> TextEvent {
 		let mut choice_num = pick_random_in_range(1, self.distortions.total_usages);
 
 		for (next_char, next_count) in choice_stats.options.iter() {
@@ -196,36 +247,32 @@ impl<'a> Generator<'a> {
 				}
 
 				if let Some(word_count) = self.sentence_watcher.watch(*next_char) {
-
-					let diff = num::abs(word_count - self.current_sentence_length) as f64;
-					let total = self.current_sentence_length as f64;
-					let percent = ((diff / total) * 100.0) as i32;
-					println!("sentence error percent: {}%", percent);
-
 					if self.total >= self.output_amount {
-						let _ = self.output_file.flush();
-    					println!("\nDone.");
-						process::exit(1);
+						return TextEvent::OutputComplete;
 					}
 					self.generate_next_sentence_length();
+
+					return TextEvent::SentenceComplete(word_count);
 				}
 
 				break;
 			}
 		}
+
+		return TextEvent::CharGenerated;
 	}
 
 	fn output(&mut self, string: &String) {
 		if self.use_html {
-			let _ = self.output_file.write("<span class=\"order-".as_bytes());
-			let _ = self.output_file.write(self.current.chars().count().to_string().as_bytes());
-			let _ = self.output_file.write("\">".as_bytes());
+			self.output_buffer.push_str("<span class=\"order-");
+			self.output_buffer.push_str(&self.current.chars().count().to_string());
+			self.output_buffer.push_str("\">");
 		}
 
-		let _ = self.output_file.write(string.as_bytes());
+		self.output_buffer.push_str(&string);
 
 		if self.use_html {
-			let _ = self.output_file.write("</span>".as_bytes());
+			self.output_buffer.push_str("</span>");
 		}
 	}
 
