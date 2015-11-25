@@ -2,11 +2,13 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use sentence_watcher::SentenceWatcher;
+use paragraph_watcher::ParagraphWatcher;
 
 #[derive(Debug)]
 pub struct Stats<'a> {
 	pub char_stats: Vec<OrderStats<'a>>,
-	pub sentence_stats: SentenceStats<'a>
+	pub sentence_stats: SentenceStats<'a>,
+	pub paragraph_stats: ParagraphStats,
 }
 
 impl<'a> Stats<'a> {
@@ -26,12 +28,20 @@ impl<'a> Stats<'a> {
 			stats_for_state: HashMap::new()
 		};
 
+		let paragraph_stats = ParagraphStats {
+			total_usages: 0,
+			stats_for_state: HashMap::new()
+		};
+
 		Stats {
 			char_stats: char_stats,
-			sentence_stats: sentence_stats
+			sentence_stats: sentence_stats,
+			paragraph_stats: paragraph_stats,
 		}
 	}
 }
+
+
 
 #[derive(Debug)]
 pub struct OrderStats<'a> {
@@ -77,6 +87,8 @@ impl CharChoiceStats {
 	}
 }
 
+
+
 #[derive(Debug)]
 pub struct SentenceStats<'a> {
 	pub total_usages: i32,
@@ -120,6 +132,50 @@ impl SentenceChoiceStats {
 	}
 }
 
+
+#[derive(Debug)]
+pub struct ParagraphStats {
+	pub total_usages: i32,
+	pub stats_for_state: HashMap<i32, ParagraphChoiceStats>
+}
+
+impl ParagraphStats {
+	fn add_stats(&mut self, state: i32, next: i32) {
+		self.total_usages += 1;
+
+		if !self.stats_for_state.contains_key(&state) {
+			let choice_stats = ParagraphChoiceStats {
+				total_usages: 0,
+				options: HashMap::new()
+			};
+			self.stats_for_state.insert(state, choice_stats);
+		}
+
+		let mut choice_stats = self.stats_for_state.get_mut(&state).unwrap();
+		choice_stats.add_option(next);
+	}
+}
+
+#[derive(Debug)]
+pub struct ParagraphChoiceStats {
+	pub total_usages: i32,
+	pub options: HashMap<i32, i32>
+}
+
+impl ParagraphChoiceStats {
+	fn add_option(&mut self, option: i32) {
+		self.total_usages += 1;
+
+		if !self.options.contains_key(&option) {
+			self.options.insert(option, 0);
+		}
+
+		let mut char_count = self.options.get_mut(&option).unwrap();
+		*char_count += 1;
+	}
+}
+
+
 // Build statistics which describe the probability of choosing 
 //  a given character after a configurable (MAX_ORDER) number of
 //  characters has been encountered.
@@ -132,6 +188,7 @@ pub fn gather_statistics(text: &str, max_order: usize) -> Stats {
 	//  order as we go.
 
 	let mut sentence_watcher = SentenceWatcher::new();
+	let mut paragraph_watcher = ParagraphWatcher::new();
 
 	// A sliding window of length MAX_ORDER + 1 that captures the character offsets
 	//  of current character as well as the past MAX_ORDER characters. This allows
@@ -177,27 +234,24 @@ pub fn gather_statistics(text: &str, max_order: usize) -> Stats {
 				stats.sentence_stats.add_stats(previous_length, word_count);
 			}
 		}
+
+		// Collection paragraph-length stats:
+
+		if let Some((previous_length, sentence_count)) = paragraph_watcher.watch_for_stats(next_char, &sentence_watcher) {
+			if let Some(previous_length) = previous_length {
+				stats.paragraph_stats.add_stats(previous_length, sentence_count);
+			}
+		}
 	}
 
-	// println!("{}", stats.sentence_stats.starts.len());
-	// let mut i = 0;
-	// for s in stats.sentence_stats.starts.iter() {
-	// 	println!("{}", &s[0..40]);
-	// 	println!("----");
-	// 	i += 1;
-	// 	if i == 20 {
-	// 		break;
-	// 	}
-	// }
+	// Print out paragraph stats:
+	for (key, val) in stats.paragraph_stats.stats_for_state.iter() {
+		println!("\"{}\":", key);
 
-	// Print out sentence stats:
-	// for (key, val) in stats.sentence_stats.stats_for_state.iter() {
-	// 	println!("\"{}\":", key);
-
-	// 	for (key2, val2) in val.options.iter() {
-	// 		println!("   '{}' -> {}", key2, val2);
-	// 	}
-	// }
+		for (key2, val2) in val.options.iter() {
+			println!("   '{}' -> {}", key2, val2);
+		}
+	}
 
 	return stats;
 }

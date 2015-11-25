@@ -6,7 +6,7 @@ pub struct SentenceWatcher {
 	pub enders: HashSet<char>,
 	
 	in_word: bool,
-	start: Option<usize>,
+	pub start: Option<usize>,
 	previous_length: Option<i32>,
 }
 
