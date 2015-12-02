@@ -6,12 +6,9 @@ use rand::random;
 use num;
 use num::traits::NumCast;
 use gather_stats::{
-	Stats,
 	OrderStats,
 	CharChoiceStats,
 	};
-use sentence_watcher::SentenceWatcher;
-use paragraph_watcher::ParagraphWatcher;
 
 #[derive(Debug)]
 pub struct Args {
@@ -29,13 +26,11 @@ pub struct Args {
 pub enum TextEvent {
 	CharGenerated,
 	OutputComplete,
-	SentenceComplete(i32), // Contains word count of completed sentence.
-	ParagraphComplete(i32), // Contains sentence count of completed paragraph.
 }
 
 pub struct Generator<'a> {
 	// immutables:
-	stats: &'a Stats<'a>,
+	stats: &'a Vec<OrderStats<'a>>,
 	max_order: usize,
 	min_order: usize,
 	output_amount: usize,
@@ -53,18 +48,10 @@ pub struct Generator<'a> {
 	total: usize,
 	change_order_counter: i32,
 	distortions: CharChoiceStats,
-
-	// sentence-level:
-	sentence_watcher: SentenceWatcher,
-	pub current_sentence_length: i32,
-
-	// paragraph-level:
-	paragraph_watcher: ParagraphWatcher,
-	pub current_paragraph_length: i32,
 }
 
 impl<'a> Generator<'a> {
-	pub fn new(args: &Args, stats: &'a Stats<'a>) -> Generator<'a> {
+	pub fn new(args: &Args, stats: &'a Vec<OrderStats<'a>>) -> Generator<'a> {
 		let mut output_buffer = String::new();
 
 		if args.use_html {
@@ -113,10 +100,6 @@ impl<'a> Generator<'a> {
 				total_usages: 0,
 				options: HashMap::new()
 			},
-			sentence_watcher: SentenceWatcher::new(),
-			current_sentence_length: 0,
-			paragraph_watcher: ParagraphWatcher::new(),
-			current_paragraph_length: 0,
 		};
 
 		return generator;
@@ -132,66 +115,32 @@ impl<'a> Generator<'a> {
 		self.current_order = target.current_order;
 		self.total = target.total;
 		self.change_order_counter = target.change_order_counter;
-		self.current_sentence_length = target.current_sentence_length;
-		self.current_paragraph_length = target.current_paragraph_length;
-
-		self.sentence_watcher.sync(&target.sentence_watcher);
-		self.paragraph_watcher.sync(&target.paragraph_watcher);
 	}
 
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
 	pub fn start(&mut self) {
-		let sentence_starts = &self.stats.sentence_stats.starts;
-		let mut choice_index = pick_random_in_range(0, sentence_starts.len() - 1);
-		while sentence_starts[choice_index].chars().next().unwrap().is_lowercase() {
-			choice_index = pick_random_in_range(0, sentence_starts.len() - 1);
-		}
-
-		for (i, next_char) in sentence_starts[choice_index].chars().enumerate() {
-			if i < self.current_order {
-				self.current.push(next_char);
-				self.total += 1;
-				self.sentence_watcher.watch(next_char);
-			}
-		}
+		let start_index = pick_random_in_range(0, self.stats[self.current_order - 1].stats_for_state.len() - 1);
+		self.current = String::from(*self.stats[self.current_order - 1].stats_for_state.keys().nth(start_index).unwrap());
 
 		let start_output = self.current.clone();
 		self.output(&start_output);
-
-		let sentence_choice_index = pick_random_in_range(0, self.stats.sentence_stats.stats_for_state.len() - 1);
-		self.current_sentence_length = *self.stats.sentence_stats.stats_for_state.keys().nth(sentence_choice_index).unwrap();
-
-		let paragraph_choice_index = pick_random_in_range(0, self.stats.paragraph_stats.stats_for_state.len() - 1);
-		self.current_paragraph_length = *self.stats.paragraph_stats.stats_for_state.keys().nth(paragraph_choice_index).unwrap();
 	}
 
 	// Generate characters that follow the starting string chosen by
 	//  following random paths through the generated statistics.
 
-	#[allow(dead_code)]
 	pub fn generate_text(&mut self) {
 		loop {
-			let choice_stats = &self.stats.char_stats[self.current_order - 1].stats_for_state[&self.current[..]];
-
-			self.update_order_used();
-			self.calculate_distortions(&choice_stats);
-			self.generate_next_character(&choice_stats);
-		}
-	}
-
-	pub fn generate_sentence(&mut self) -> TextEvent {
-		loop {
-			let choice_stats = &self.stats.char_stats[self.current_order - 1].stats_for_state[&self.current[..]];
+			let choice_stats = &self.stats[self.current_order - 1].stats_for_state[&self.current[..]];
 
 			self.update_order_used();
 			self.calculate_distortions(&choice_stats);
 			let event = self.generate_next_character(&choice_stats);
 
 			match event {
-				TextEvent::OutputComplete => return event,
-				TextEvent::SentenceComplete(_) => return event,
+				TextEvent::OutputComplete => return,
 				_ => continue,
 			}
 		}
@@ -225,19 +174,8 @@ impl<'a> Generator<'a> {
 		self.distortions.total_usages = choice_stats.total_usages;
 		self.distortions.options.clear();
 		for (char_choice, count) in choice_stats.options.iter() {
-			if self.sentence_watcher.enders.contains(char_choice) {
-				let new_count = if self.current_sentence_length > self.sentence_watcher.word_count {
-					(*count as f64 / self.distortion_factor as f64).ceil() as i32
-				} else {
-					count * self.distortion_factor
-				};
-				self.distortions.total_usages += new_count - count;
-				self.distortions.options.insert(*char_choice, new_count);
-			}
-			// if *char_choice == '\n' {
-			// 	let inside_paragraph = self.current_paragraph_length > self.paragraph_watcher.sentence_count;
-			// 	let inside_sentence = self.sentence_watcher.word_count != 0;
-			// 	let new_count = if inside_paragraph || inside_sentence {
+			// if self.sentence_watcher.enders.contains(char_choice) {
+			// 	let new_count = if self.current_sentence_length > self.sentence_watcher.word_count {
 			// 		(*count as f64 / self.distortion_factor as f64).ceil() as i32
 			// 	} else {
 			// 		count * self.distortion_factor
@@ -269,24 +207,8 @@ impl<'a> Generator<'a> {
 					self.current.remove(0);
 				}
 
-				if let Some(word_count) = self.sentence_watcher.watch(*next_char) {
-					if self.total >= self.output_amount {
-						return TextEvent::OutputComplete;
-					}
-					self.generate_next_sentence_length();
-
-					return TextEvent::SentenceComplete(word_count);
-				}
-
-				if let Some(sentence_count) = self.paragraph_watcher.watch(*next_char, &self.sentence_watcher) {
-
-					let diff = (sentence_count - self.current_paragraph_length) as f64;
-					let total = self.current_paragraph_length as f64;
-					let percent = ((diff / total) * 100.0) as i32;
-					println!("paragraph error percent: {}{}%", if percent >= 0 {" "} else {""}, percent);
-
-					self.generate_next_paragraph_length();
-					return TextEvent::ParagraphComplete(sentence_count);
+				if self.total >= self.output_amount {
+					return TextEvent::OutputComplete;
 				}
 
 				break;
@@ -307,44 +229,6 @@ impl<'a> Generator<'a> {
 
 		if self.use_html {
 			self.output_buffer.push_str("</span>");
-		}
-	}
-
-	fn generate_next_sentence_length(&mut self) {
-		let stats_for_state = &self.stats.sentence_stats.stats_for_state;
-		if let Some(choice_stats) = stats_for_state.get(&self.current_sentence_length) {
-			let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
-
-			for (next_length, count) in choice_stats.options.iter() {
-				choice_num = choice_num - count;
-
-				if choice_num <= 0 {
-					self.current_sentence_length = *next_length;
-					break;
-				}
-			}
-		} else {
-			let sentence_choice_index = pick_random_in_range(0, stats_for_state.len() - 1);
-			self.current_sentence_length = *stats_for_state.keys().nth(sentence_choice_index).unwrap();
-		}
-	}
-
-	fn generate_next_paragraph_length(&mut self) {
-		let stats_for_state = &self.stats.paragraph_stats.stats_for_state;
-		if let Some(choice_stats) = stats_for_state.get(&self.current_paragraph_length) {
-			let mut choice_num = pick_random_in_range(1, choice_stats.total_usages);
-
-			for (next_length, count) in choice_stats.options.iter() {
-				choice_num = choice_num - count;
-
-				if choice_num <= 0 {
-					self.current_paragraph_length = *next_length;
-					break;
-				}
-			}
-		} else {
-			let paragraph_choice_index = pick_random_in_range(0, stats_for_state.len() - 1);
-			self.current_paragraph_length = *stats_for_state.keys().nth(paragraph_choice_index).unwrap();
 		}
 	}
 }
