@@ -17,9 +17,10 @@ impl ParagraphWatcher {
 			previous_length: None,
 		}
 	}
-	#[allow(dead_code)]
 	pub fn sync(&mut self, target: &ParagraphWatcher) {
 		self.sentence_count = target.sentence_count;
+		self.in_sentence = target.in_sentence;
+		self.has_ended = target.has_ended;
 		self.previous_length = target.previous_length;
 	}
 	pub fn watch_for_stats(&mut self, next_char: char, sentence_watcher: &SentenceWatcher) -> Option<(Option<i32>, i32)> {
@@ -42,5 +43,12 @@ impl ParagraphWatcher {
 			}
 		}
 		return paragraph_ended;
+	}
+	pub fn watch(&mut self, next_char: char, sentence_watcher: &SentenceWatcher) -> Option<i32> {
+		if let Some((_, sentence_count)) = self.watch_for_stats(next_char, sentence_watcher) {
+			Some(sentence_count)
+		} else {
+			None
+		}
 	}
 }

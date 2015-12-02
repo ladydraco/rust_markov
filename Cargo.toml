@@ -6,3 +6,4 @@ authors = ["GixXer"]
 [dependencies]
 rand = "0.3.11"
 num = "0.1.27"
+regex = "0.1.43"

@@ -1,25 +1,34 @@
 
 extern crate rand;
 extern crate num;
+extern crate regex;
 
 mod gather_stats;
 mod generate_text;
 mod sentence_watcher;
 mod paragraph_watcher;
+mod preprocess;
 
 use std::env;
 use std::process;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use gather_stats::gather_statistics;
+use gather_stats::{
+	gather_stats,
+	gather_statistics
+};
 use generate_text::{
 	Args,
 	Generator,
 	TextEvent,
 	};
+use preprocess::{
+	preprocess,
+	extract_form
+	};
 
-const INPUT_FILE: &'static str = "alice.txt";
+const INPUT_FILE: &'static str = "input/alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
 const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
@@ -27,7 +36,22 @@ const OUTPUT_CHARS: usize = 1200;
 const MAX_TRIES: usize = 5;
 const DISTORTION_FACTOR: i32 = 10;
 
-fn main() {
+fn main () {
+	// let args = parse_arguments();
+	// let raw_text = load_book(&args.input_filename);
+
+	// let text = preprocess(&raw_text);
+	// let text_structure = extract_form(&text);
+
+	// let text_stats = gather_stats(&text, args.higher_order_bound);
+	// let form_stats = gather_stats(&text_structure, 15);
+
+	// output_file(&args.output_filename, &text_structure);
+
+	goo();
+}
+
+fn goo() {
 	let args = parse_arguments();
 
 	let text = load_book(&args.input_filename);
@@ -74,12 +98,12 @@ fn main() {
 			let sentence = generator.pop_buffer_conents();
 			output.push_str(&sentence);
 
-			if let TextEvent::SentenceComplete(word_count) = winning_event {
-				let diff = (word_count - desired_word_count) as f64;
-				let total = desired_word_count as f64;
-				let percent = ((diff / total) * 100.0) as i32;
-				println!("sentence error percent: {}{}%", if percent >= 0 {" "} else {""}, percent);
-			}
+			// if let TextEvent::SentenceComplete(word_count) = winning_event {
+			// 	let diff = (word_count - desired_word_count) as f64;
+			// 	let total = desired_word_count as f64;
+			// 	let percent = ((diff / total) * 100.0) as i32;
+			// 	println!("sentence error percent: {}{}%", if percent >= 0 {" "} else {""}, percent);
+			// }
 
 			if let TextEvent::OutputComplete = winning_event {
 				break;

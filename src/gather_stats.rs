@@ -180,6 +180,53 @@ impl ParagraphChoiceStats {
 //  a given character after a configurable (MAX_ORDER) number of
 //  characters has been encountered.
 
+pub fn gather_stats(text: &str, max_order: usize) -> Vec<OrderStats> {
+	let mut stats: Vec<OrderStats> = Vec::new();
+	for _ in 0..max_order {
+		let order_stats = OrderStats {
+			total_usages: 0,
+			stats_for_state: HashMap::new()
+		};
+		stats.push(order_stats);
+	}
+
+	// A sliding window of length MAX_ORDER + 1 that captures the character offsets
+	//  of current character as well as the past MAX_ORDER characters. This allows
+	//  us to create <&str> representations of strings of the previous 1, 2, ..., MAX_ORDER
+	//  characters, in order to gather statistics about how likely the current character
+	//  is to follow them.
+	let mut window = VecDeque::new();
+
+	for (offset, next_char) in text.char_indices() {
+
+		// Move the window (so that it includes the current character's offset).
+
+		window.push_front(offset);
+		if window.len() > max_order + 1 {
+			window.pop_back();
+		}
+
+		// Collect character-level stats for each order:
+
+		if window.len() > 1 {
+			for i in 1..window.len() {
+				// The order is one less than the slice distance of the key
+				// for that order:
+				let ord = i - 1;
+
+				// Extract a key of length ord:
+				let start = window[i];
+				let end = window[0];
+				let key = &text[start..end];
+				
+				stats[ord].add_stats(key, next_char);
+			}
+		}
+	}
+
+	return stats;
+}
+
 pub fn gather_statistics(text: &str, max_order: usize) -> Stats {
 
 	let mut stats = Stats::new(max_order);
@@ -245,13 +292,13 @@ pub fn gather_statistics(text: &str, max_order: usize) -> Stats {
 	}
 
 	// Print out paragraph stats:
-	for (key, val) in stats.paragraph_stats.stats_for_state.iter() {
-		println!("\"{}\":", key);
+	// for (key, val) in stats.paragraph_stats.stats_for_state.iter() {
+	// 	println!("\"{}\":", key);
 
-		for (key2, val2) in val.options.iter() {
-			println!("   '{}' -> {}", key2, val2);
-		}
-	}
+	// 	for (key2, val2) in val.options.iter() {
+	// 		println!("   '{}' -> {}", key2, val2);
+	// 	}
+	// }
 
 	return stats;
 }
