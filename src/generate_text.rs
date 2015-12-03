@@ -31,9 +31,6 @@ pub struct Generator<'a> {
 	use_html: bool,
 	distortion_factor: i32,
 
-	// output:
-	output_buffer: String,
-
 	// current state:
 
 	// char-level:
@@ -46,35 +43,6 @@ pub struct Generator<'a> {
 
 impl<'a> Generator<'a> {
 	pub fn new(stats: &'a Vec<OrderStats<'a>>, args: &Args, min_order: usize, max_order: usize) -> Generator<'a> {
-		let mut output_buffer = String::new();
-
-		if args.use_html {
-			output_buffer.push_str("<meta charset=\"UTF-8\">");
-			output_buffer.push_str("<style type=\"text/css\"> body { white-space: pre-wrap; } ");
-			for i in min_order..max_order + 1 {
-				
-				let a = max_order + 1 - min_order;
-				let b = i - min_order;
-				let c = a - b - 1;
-				let multiplier = c as f64 / a as f64;
-
-				let value = (multiplier * 248.0) as i32;
-				output_buffer.push_str(".order-");
-				output_buffer.push_str(&i.to_string());
-				output_buffer.push_str("{ ");
-
-				output_buffer.push_str(" color: rgb(");
-				output_buffer.push_str(&value.to_string());
-				output_buffer.push_str(",");
-				output_buffer.push_str(&value.to_string());
-				output_buffer.push_str(",");
-				output_buffer.push_str(&value.to_string());
-				output_buffer.push_str(");\n");
-
-				output_buffer.push_str("}\n");
-			}
-			output_buffer.push_str("</style>");
-		}
 
 		let generator = Generator {
 			stats: stats,
@@ -83,8 +51,6 @@ impl<'a> Generator<'a> {
 			output_amount: args.output_amount,
 			use_html: args.use_html,
 			distortion_factor: args.distortion_factor,
-
-			output_buffer: output_buffer,
 
 			current: String::new(),
 			current_order: max_order,
@@ -100,10 +66,8 @@ impl<'a> Generator<'a> {
 	}
 
 	pub fn sync(&mut self, target: &Generator) {
-		self.output_buffer.clear();
 		self.current.clear();
 
-		self.output_buffer.push_str(&target.output_buffer);
 		self.current.push_str(&target.current);
 
 		self.current_order = target.current_order;
@@ -121,15 +85,6 @@ impl<'a> Generator<'a> {
 			let start_index = pick_random_in_range(0, self.stats[self.current_order - 1].stats_for_state.len() - 1);
 			self.current = String::from(*self.stats[self.current_order - 1].stats_for_state.keys().nth(start_index).unwrap());
 		}
-		
-		let start_output = self.current.clone();
-		self.output(&start_output);
-	}
-
-	pub fn pop(&mut self) -> String {
-		let contents = self.output_buffer.clone();
-		self.output_buffer.clear();
-		return contents;
 	}
 
 	fn update_order_used(&mut self) {
@@ -166,7 +121,8 @@ impl<'a> Generator<'a> {
 		}
 	}
 
-	pub fn next(&mut self) -> char {
+	pub fn next(&mut self) -> (char, usize) {
+		let order_used = self.current_order;
 		let choice_stats = 
 			if let Some(choice_stats) = 
 				self.stats[self.current_order - 1].stats_for_state.get(&self.current[..]) 
@@ -192,8 +148,6 @@ impl<'a> Generator<'a> {
 			choice_num -= count;
 
 			if choice_num <= 0 {
-				self.output(&next_char.to_string());
-
 				self.current.push(*next_char);
 				self.total += 1;
 
@@ -202,25 +156,11 @@ impl<'a> Generator<'a> {
 					self.current.remove(0);
 				}
 
-				return *next_char;
+				return (*next_char, order_used);
 			}
 		}
 
 		panic!("Failed to choose a next character.");
-	}
-
-	fn output(&mut self, string: &String) {
-		if self.use_html {
-			self.output_buffer.push_str("<span class=\"order-");
-			self.output_buffer.push_str(&self.current.chars().count().to_string());
-			self.output_buffer.push_str("\">");
-		}
-
-		self.output_buffer.push_str(&string);
-
-		if self.use_html {
-			self.output_buffer.push_str("</span>");
-		}
 	}
 }
 
