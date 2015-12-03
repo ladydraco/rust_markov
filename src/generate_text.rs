@@ -22,12 +22,6 @@ pub struct Args {
 	pub use_html: bool
 }
 
-#[derive(Copy, Clone)]
-pub enum TextEvent {
-	CharGenerated,
-	OutputComplete,
-}
-
 pub struct Generator<'a> {
 	// immutables:
 	stats: &'a Vec<OrderStats<'a>>,
@@ -51,16 +45,16 @@ pub struct Generator<'a> {
 }
 
 impl<'a> Generator<'a> {
-	pub fn new(args: &Args, stats: &'a Vec<OrderStats<'a>>) -> Generator<'a> {
+	pub fn new(stats: &'a Vec<OrderStats<'a>>, args: &Args, min_order: usize, max_order: usize) -> Generator<'a> {
 		let mut output_buffer = String::new();
 
 		if args.use_html {
 			output_buffer.push_str("<meta charset=\"UTF-8\">");
 			output_buffer.push_str("<style type=\"text/css\"> body { white-space: pre-wrap; } ");
-			for i in args.lower_order_bound..args.higher_order_bound + 1 {
+			for i in min_order..max_order + 1 {
 				
-				let a = args.higher_order_bound + 1 - args.lower_order_bound;
-				let b = i - args.lower_order_bound;
+				let a = max_order + 1 - min_order;
+				let b = i - min_order;
 				let c = a - b - 1;
 				let multiplier = c as f64 / a as f64;
 
@@ -84,8 +78,8 @@ impl<'a> Generator<'a> {
 
 		let generator = Generator {
 			stats: stats,
-			max_order: args.higher_order_bound,
-			min_order: args.lower_order_bound,
+			max_order: max_order,
+			min_order: min_order,
 			output_amount: args.output_amount,
 			use_html: args.use_html,
 			distortion_factor: args.distortion_factor,
@@ -93,7 +87,7 @@ impl<'a> Generator<'a> {
 			output_buffer: output_buffer,
 
 			current: String::new(),
-			current_order: args.higher_order_bound,
+			current_order: max_order,
 			total: 0,
 			change_order_counter: 0,
 			distortions: CharChoiceStats {
@@ -120,33 +114,19 @@ impl<'a> Generator<'a> {
 	// Choose random starting string (encountered in the input text) 
 	//  of length MAX_ORDER.
 
-	pub fn start(&mut self) {
-		let start_index = pick_random_in_range(0, self.stats[self.current_order - 1].stats_for_state.len() - 1);
-		self.current = String::from(*self.stats[self.current_order - 1].stats_for_state.keys().nth(start_index).unwrap());
-
+	pub fn start(&mut self, start: Option<&str>) {
+		if start.is_some() {
+			self.current = String::from(start.unwrap());
+		} else {
+			let start_index = pick_random_in_range(0, self.stats[self.current_order - 1].stats_for_state.len() - 1);
+			self.current = String::from(*self.stats[self.current_order - 1].stats_for_state.keys().nth(start_index).unwrap());
+		}
+		
 		let start_output = self.current.clone();
 		self.output(&start_output);
 	}
 
-	// Generate characters that follow the starting string chosen by
-	//  following random paths through the generated statistics.
-
-	pub fn generate_text(&mut self) {
-		loop {
-			let choice_stats = &self.stats[self.current_order - 1].stats_for_state[&self.current[..]];
-
-			self.update_order_used();
-			self.calculate_distortions(&choice_stats);
-			let event = self.generate_next_character(&choice_stats);
-
-			match event {
-				TextEvent::OutputComplete => return,
-				_ => continue,
-			}
-		}
-	}
-
-	pub fn pop_buffer_conents(&mut self) -> String {
+	pub fn pop(&mut self) -> String {
 		let contents = self.output_buffer.clone();
 		self.output_buffer.clear();
 		return contents;
@@ -186,7 +166,22 @@ impl<'a> Generator<'a> {
 		}
 	}
 
-	fn generate_next_character(&mut self, choice_stats: &CharChoiceStats) -> TextEvent {
+	pub fn next(&mut self) -> char {
+		let choice_stats = 
+			if let Some(choice_stats) = 
+				self.stats[self.current_order - 1].stats_for_state.get(&self.current[..]) 
+			{
+				choice_stats
+			} else {
+				panic!("Current state could not be found in stats. Key: '{}' (length: {}), Order: {}", 
+					    self.current, 
+					    self.current.chars().count(), 
+					    self.current_order);
+			};
+
+		self.update_order_used();
+		self.calculate_distortions(&choice_stats);
+
 		let mut choice_num = pick_random_in_range(1, self.distortions.total_usages);
 
 		for (next_char, next_count) in choice_stats.options.iter() {
@@ -207,15 +202,11 @@ impl<'a> Generator<'a> {
 					self.current.remove(0);
 				}
 
-				if self.total >= self.output_amount {
-					return TextEvent::OutputComplete;
-				}
-
-				break;
+				return *next_char;
 			}
 		}
 
-		return TextEvent::CharGenerated;
+		panic!("Failed to choose a next character.");
 	}
 
 	fn output(&mut self, string: &String) {
@@ -245,7 +236,7 @@ fn debug_stats(stats: &OrderStats) {
 	}
 }
 
-fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
+pub fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
 	let start_f = num::cast::<T, f64>(start).unwrap();
 	let end_f = num::cast::<T, f64>(end).unwrap();
 

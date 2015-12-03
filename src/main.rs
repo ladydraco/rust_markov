@@ -16,12 +16,13 @@ use gather_stats::gather_stats;
 use generate_text::{
 	Args,
 	Generator,
-	TextEvent,
+	pick_random_in_range,
 	};
 use preprocess::{
 	preprocess,
 	extract_form
 	};
+use regex::Regex;
 
 const INPUT_FILE: &'static str = "input/alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
@@ -30,31 +31,84 @@ const MAX_ORDER: usize = 6;
 const OUTPUT_CHARS: usize = 1200;
 const MAX_TRIES: usize = 5;
 const DISTORTION_FACTOR: i32 = 10;
+const FORM_MAX_ORDER: usize = 25;
+const FORM_MIN_ORDER: usize = 20;
 
 fn main () {
 	let args = parse_arguments();
 	let raw_text = load_book(&args.input_filename);
 
+	// Create an artificial starting point for the text form
+	// so that the markov chain can begin generating at the beginning:
+
+	let form_starting_key = {
+		let mut key = String::new();
+		for _ in 0..FORM_MAX_ORDER {
+			key.push('>');
+		}
+		key
+	};
+
+	// Preprocess text, to disambuate what characters are content vs. form.
+
 	let text = preprocess(&raw_text);
-	let text_structure = extract_form(&text);
+	let text_form = {
+		let text_form = extract_form(&text);
+		let mut text_form1 = String::new();
+		text_form1.push_str(&form_starting_key);
+		text_form1.push_str(&text_form);
+		text_form1
+	};
+
+	// Gather markov stats about both text and form:
 
 	let text_stats = gather_stats(&text, args.higher_order_bound);
-	let form_stats = gather_stats(&text_structure, 15);
+	let form_stats = gather_stats(&text_form, FORM_MAX_ORDER);
 
-	let mut generator = Generator::new(&args, &text_stats);
-	generator.start();
-	generator.generate_text();
-	let mut output = generator.pop_buffer_conents();
+	// Create a generator for text:
 
-	let mut generator2 = Generator::new(&args, &form_stats);
-	generator2.start();
-	generator2.generate_text();
-	let output2 = generator2.pop_buffer_conents();
+	// Pick a starting point for the text generator: 
+
+	// Find "max order" characters that begin a sentence.
+	let mut text_starting_key = String::new();
+	let sentence_ish_starts = Regex::new(r"[A-Z][\wʼ -]{14,}").unwrap();
+	let matches = sentence_ish_starts.find_iter(&text).collect::<Vec<_>>();
+	let start_index = pick_random_in_range(0, matches.len() - 1);
+	let start_bounds = matches[start_index];
+	let start_match = &text[start_bounds.0..start_bounds.1];
+	let mut i = 0;
+	for c in start_match.chars() {
+		text_starting_key.push(c);
+		i += 1;
+		if i == args.higher_order_bound { break; }
+	}
+
+	// Run the text generator:
+
+	let mut text_generator = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
+	text_generator.start(Some(&text_starting_key));
+	let mut output = text_starting_key.clone();
+	let mut start = output.chars().count();
+	for _ in start..args.output_amount {
+		output.push(text_generator.next());
+	}
 
 	output.push_str("\n-------\n");
-	output.push_str(&output2);
+
+	// Create a generator for structure:
+
+	let mut form_generator = Generator::new(&form_stats, &args, FORM_MIN_ORDER, FORM_MAX_ORDER);
+	form_generator.start(Some(&form_starting_key));
+	for _ in 0..12 { form_generator.next(); } // Skip past titles for now.
+	for _ in 0..args.output_amount {
+		output.push(form_generator.next());
+	}
 
 	output_file(&args.output_filename, &output);
+}
+
+fn next_structure(form_generator: &Generator) {
+
 }
 
 fn goo() {
@@ -63,12 +117,12 @@ fn goo() {
 	let text = load_book(&args.input_filename);
 	let stats = gather_stats(&text, args.higher_order_bound);
 
-	let mut generator = Generator::new(&args, &stats);
-	generator.start();
+	let mut generator = Generator::new(&stats, &args, args.lower_order_bound, args.higher_order_bound);
+	generator.start(None);
 
 	let mut slaves = Vec::new();
 	for _ in 0..args.max_tries {
-		slaves.push(Generator::new(&args, &stats));
+		slaves.push(Generator::new(&stats, &args, args.lower_order_bound, args.higher_order_bound));
 	}
 
 	let mut output = String::new();
@@ -101,7 +155,7 @@ fn goo() {
 	// 	if let Some(winner) = winning_slave {
 	// 		generator.sync(&slaves[winner]);
 
-	// 		let sentence = generator.pop_buffer_conents();
+	// 		let sentence = generator.pop();
 	// 		output.push_str(&sentence);
 
 	// 		// if let TextEvent::SentenceComplete(word_count) = winning_event {

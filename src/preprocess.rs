@@ -74,14 +74,12 @@ fn process_quotes(input: &String) -> String {
 	return output;
 }
 
-pub fn extract_form(input: &String) -> String {
-	let text2 = preprocess(&input);
-
+pub fn extract_form(processed_text: &String) -> String {
 	let mut output = String::new();
 
 	let mut saw_alphabetic = false;
 
-	for c in text2.chars() {
+	for c in processed_text.chars() {
 		if c.is_alphabetic() || c == '-' {
 			saw_alphabetic = true;
 		} else {
