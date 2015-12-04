@@ -6,6 +6,7 @@ extern crate regex;
 mod gather_stats;
 mod generate_text;
 mod preprocess;
+mod form_watcher;
 
 use std::env;
 use std::process;
@@ -22,6 +23,7 @@ use preprocess::{
 	preprocess,
 	extract_form
 	};
+use form_watcher::FormWatcher;
 use regex::Regex;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -30,28 +32,14 @@ const INPUT_FILE: &'static str = "input/alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
 const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
-const OUTPUT_CHARS: usize = 1200;
+const OUTPUT_CHARS: usize = 300;
 const MAX_TRIES: usize = 5;
 const DISTORTION_FACTOR: i32 = 10;
 const FORM_MAX_ORDER: usize = 25;
-const FORM_MIN_ORDER: usize = 20;
 
 fn main () {
 	let args = parse_arguments();
 	let raw_text = load_book(&args.input_filename);
-
-	// Create an artificial starting point for the text form
-	// so that the markov chain can begin generating at the beginning:
-
-	let form_starting_key = {
-		let mut key = String::new();
-		for _ in 0..FORM_MAX_ORDER {
-			key.push('>');
-		}
-		key
-	};
-
-
 
 	// Preprocess text, to disambuate what characters are content vs. form.
 
@@ -81,13 +69,7 @@ fn main () {
 		text
 	};
 
-	let text_form = {
-		let text_form = extract_form(&text);
-		let mut text_form1 = String::new();
-		text_form1.push_str(&form_starting_key); // Prepend artificial starting point.
-		text_form1.push_str(&text_form);
-		text_form1
-	};
+	let text_form = extract_form(&text);
 
 	// Gather markov stats about both text and form:
 
@@ -102,120 +84,25 @@ fn main () {
 		write_html_header(&mut output, args.lower_order_bound, args.higher_order_bound);
 	}
 
+	// Create a form watcher for text:
+	let mut watcher = FormWatcher::new(&form_stats, FORM_MAX_ORDER);
+
 	let mut text_generator = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
 	text_generator.start(Some(&text_starting_key));
 	for c in text_starting_key.chars() { 
-		output_char(&mut output, args.use_html, (c, args.higher_order_bound), true);
+		output_char(&mut output, args.use_html, (c, args.higher_order_bound));
+		watcher.watch(c);
 		output_amount += 1;
 	}
-	println!("{}", text_starting_key);
-
-	// Create a bunch of worker generators to try multiple times to get the desired structure:
-
-	let mut workers = Vec::new();
-	let mut successes = Vec::new();
-	for _ in 0..args.max_tries {
-		let worker = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
-		let worker_items = VecDeque::new();
-		workers.push((worker, worker_items));
-	}
-
-	// Create a generator for structure:
-
-	let mut form_generator = Generator::new(&form_stats, &args, FORM_MIN_ORDER, FORM_MAX_ORDER);
-	form_generator.start(Some(&form_starting_key));
-	for _ in 0..12 { form_generator.next(); } // Skip past titles for now.
-	form_generator.next(); // Consume the first "x".
-	let mut structure = next_structure(&mut form_generator);
-
-
-	// Generate text:
-
-	let mut content_chars = HashSet::new();
-	content_chars.insert('-');
-	content_chars.insert('\u{02BC}');
 
 	while output_amount < args.output_amount {
-		successes.clear();
-
-		for i in 0..args.max_tries {
-			workers[i].0.sync(&text_generator);
-			workers[i].1.clear();
-
-			// Generate content until something form-like is discovered.
-			let mut next_item = workers[i].0.next();
-			let mut next_char = next_item.0;
-			while next_char.is_alphabetic() || content_chars.contains(&next_char) || next_char == ' ' {
-				workers[i].1.push_back(next_item);
-				next_item = workers[i].0.next();
-				next_char = next_item.0;
-			}
-
-			// Generate structure until new content is discovered.
-			while !next_char.is_alphabetic() && !content_chars.contains(&next_char) {
-				workers[i].1.push_back(next_item);
-				next_item = workers[i].0.next();
-				next_char = next_item.0;
-			}
-
-			workers[i].1.push_back(next_item);
-
-			let mut debug = String::new();
-			for item in workers[i].1.iter() {
-				debug.push(item.0);
-			}
-			//println!("  {}", debug);
-
-			if workers[i].1.len() >= structure.len() {
-				let len = structure.chars().count();
-				let mut happened = workers[i].1.iter();
-				happened.next_back(); // Skip single content character.
-				let mut want = structure.chars();
-				let mut failed = false;
-				for _ in 0..len {
-					if want.next_back().unwrap() != happened.next_back().unwrap().0 {
-						failed = true;
-						break;
-					}
-				}
-				if !failed {
-					successes.push(i);
-				}
-			}
-		}
-
-		if successes.len() > 0 {
-			let choice = successes[pick_random_in_range(0, successes.len() - 1)];
-			text_generator.sync(&workers[choice].0);
-			for item in workers[choice].1.iter() {
-				output_char(&mut output, args.use_html, *item, true);
-				output_amount += 1;
-			}
-		} else {
-			let choice = pick_random_in_range(0, workers.len() - 1);
-			text_generator.sync(&workers[choice].0);
-			for item in workers[choice].1.iter() {
-				output_char(&mut output, args.use_html, *item, false);
-				output_amount += 1;
-			}
-		}
-
-		println!("Successes: {}", successes.len());
-
-		structure = next_structure(&mut form_generator);
+		let next_item = text_generator.next();
+		output_char(&mut output, args.use_html, next_item);
+		watcher.watch(next_item.0);
+		output_amount += 1;
 	}
 
 	output_file(&args.output_filename, &output);
-}
-
-fn next_structure(form_generator: &mut Generator) -> String {
-	let mut structure = String::new();
-	let (mut next_char, _) = form_generator.next();
-	while next_char != 'x' {
-		structure.push(next_char);
-		next_char = form_generator.next().0;
-	}
-	return structure;
 }
 
 fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: usize) {
@@ -247,14 +134,11 @@ fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: us
 	output_buffer.push_str("</style>");
 }
 
-fn output_char(output_buffer: &mut String, use_html: bool, next_output: (char, usize), structure_success: bool) {
+fn output_char(output_buffer: &mut String, use_html: bool, next_output: (char, usize)) {
 	if use_html {
 		output_buffer.push_str("<span class=\"");
 		output_buffer.push_str("order-");
 		output_buffer.push_str(&next_output.1.to_string());
-		if structure_success {
-			output_buffer.push_str(" structure-success");
-		}
 		output_buffer.push_str("\">");
 	}
 
