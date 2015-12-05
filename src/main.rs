@@ -32,7 +32,7 @@ const INPUT_FILE: &'static str = "input/alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
 const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
-const OUTPUT_CHARS: usize = 300;
+const OUTPUT_CHARS: usize = 1400;
 const MAX_TRIES: usize = 5;
 const DISTORTION_FACTOR: i32 = 10;
 const FORM_MAX_ORDER: usize = 25;
@@ -86,6 +86,7 @@ fn main () {
 
 	// Create a form watcher for text:
 	let mut watcher = FormWatcher::new(&form_stats, FORM_MAX_ORDER);
+	let mut worker_watcher = FormWatcher::new(&form_stats, FORM_MAX_ORDER);
 
 	let mut text_generator = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
 	text_generator.start(Some(&text_starting_key));
@@ -95,11 +96,57 @@ fn main () {
 		output_amount += 1;
 	}
 
+	let mut workers = Vec::new();
+	for _ in 0..args.max_tries {
+		let worker = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
+		let worker_items = VecDeque::new();
+		workers.push((worker, worker_items));
+	}
+
+	const MIN_FORM_COHERENCE: usize = 15;
+
 	while output_amount < args.output_amount {
-		let next_item = text_generator.next();
-		output_char(&mut output, args.use_html, next_item);
-		watcher.watch(next_item.0);
-		output_amount += 1;
+		let mut chosen = 0;
+		let mut success = false;
+		let mut best = 0;
+		for i in 0..args.max_tries {
+			workers[i].0.sync(&text_generator);
+			worker_watcher.sync(&watcher);
+			workers[i].1.clear();
+
+			let mut next_item = workers[i].0.next();
+			let mut next_watch_item = worker_watcher.watch(next_item.0);
+			workers[i].1.push_back((next_item.0, next_item.1, next_watch_item.0));
+
+			while !next_watch_item.1 {
+				next_item = workers[i].0.next();
+				next_watch_item = worker_watcher.watch(next_item.0);
+				workers[i].1.push_back((next_item.0, next_item.1, next_watch_item.0));
+			}
+
+			let coherence_raised = worker_watcher.current_order > watcher.current_order;
+			let coherence_above_min = worker_watcher.current_order >= MIN_FORM_COHERENCE;
+
+			if coherence_raised || coherence_above_min {
+				chosen = i;
+				success = true;
+				break;
+			} else if best < watcher.current_order {
+				best = i;
+			}
+		}
+
+		if !success {
+			chosen = best;
+		}
+
+		text_generator.sync(&workers[chosen].0);
+		watcher.sync(&worker_watcher);
+
+		for item in workers[chosen].1.iter() {
+			output_char(&mut output, args.use_html, (item.0, item.1));
+			output_amount += 1;
+		}
 	}
 
 	output_file(&args.output_filename, &output);

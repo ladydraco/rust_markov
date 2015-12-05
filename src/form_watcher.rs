@@ -7,6 +7,7 @@ pub struct FormWatcher<'a> {
 	stats: &'a Vec<OrderStats<'a>>,
 	max_order: usize,
 	current: String,
+	pub current_order: usize,
 	saw_possible_form_space: bool,
 }
 
@@ -16,11 +17,20 @@ impl<'a> FormWatcher<'a> {
 			stats: stats,
 			max_order: max_order,
 			current: String::new(),
+			current_order: 0,
 			saw_possible_form_space: false,
 		}
 	}
 
-	pub fn watch(&mut self, next_char: char) {
+	pub fn sync(&mut self, target: &FormWatcher) {
+		self.current.clear();
+		self.current.push_str(&target.current);
+
+		self.current_order = target.current_order;
+		self.saw_possible_form_space = target.saw_possible_form_space;
+	}
+
+	pub fn watch(&mut self, next_char: char) -> (usize, bool) {
 
 		// Add form entries to output if necessary:
 		let mut changed = false;
@@ -51,13 +61,17 @@ impl<'a> FormWatcher<'a> {
 			self.current.remove(0);
 		}
 
+		let mut ord = self.current.chars().count() - 1;
 		if changed {
-			let mut ord = self.current.chars().count() - 1;
 			while !self.stats[ord].stats_for_state.contains_key(&self.current[..]) {
 				self.current.remove(0);
 				ord -= 1;
 			}
 			println!("{} {}", self.current, ord);
 		}
+
+		self.current_order = ord;
+
+		return (ord, changed);
 	}
 }
