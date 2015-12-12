@@ -1,6 +1,7 @@
 
 use std::collections::HashSet;
 use generate_text::pick_random_in_range;
+use regex::Regex;
 
 #[derive(Debug,Eq,PartialEq,Hash,Copy,Clone)]
 enum WordType {
@@ -83,7 +84,10 @@ pub fn generate_title() -> String {
 	output2.push(capitalized_first_letter);
 	output2.push_str(&output[1..]);
 
-	return output2;
+	let a_pattern = Regex::new(r"([Aa]) ([AEIOU])").unwrap();
+	let output3 = a_pattern.replace_all(&output2, "$1n $2");
+
+	return output3;
 }
 
 pub fn generate_author() -> String {

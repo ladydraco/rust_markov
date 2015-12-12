@@ -43,9 +43,6 @@ const DISTORTION_FACTOR: i32 = 10;
 const FORM_MAX_ORDER: usize = 25;
 
 fn main () {
-	// println!("{}", generate_title());
-	// return;
-
 	let args = parse_arguments();
 	let raw_text = load_book(&args.input_filename);
 
@@ -120,7 +117,7 @@ fn main () {
 
 	const MIN_FORM_COHERENCE: usize = 15;
 
-	while output_amount < args.output_amount {
+	'text_generator: loop {
 		let mut chosen = 0;
 		let mut success = false;
 		let mut best = 0;
@@ -157,6 +154,9 @@ fn main () {
 		} else {
 			print!("Y");
 		}
+		if let Some(item) = workers[chosen].1.iter().next_back() {
+			print!(" {}\n", item.2);
+		}
 
 		text_generator.sync(&workers[chosen].0);
 		watcher.sync(&worker_watcher);
@@ -165,14 +165,27 @@ fn main () {
 			output_char(&mut output, args.use_html, *item);
 			output_amount += 1;
 		}
-		if let Some(item) = workers[chosen].1.iter().next_back() {
-			print!(" {}\n", item.2);
+
+		if output_amount >= args.output_amount {
+			let mut last_chars = workers[chosen].1.iter();
+			for _ in 0..5 {
+				if let Some(item) = last_chars.next_back() {
+					match item.0 {
+						'.' => break 'text_generator,
+						'!' => break 'text_generator,
+						'?' => break 'text_generator,
+						_ => ()
+					}
+				}
+			}
 		}
 	}
 
 	let output2 = add_chapter_headings(output);
+	let mut output3 = convert_back_from_preprocess(output2);
+	trim_end(&mut output3);
 
-	output_file(&args.output_filename, &output2);
+	output_file(&args.output_filename, &output3);
 }
 
 fn add_chapter_headings(output: String) -> String {
@@ -201,6 +214,25 @@ fn add_chapter_headings(output: String) -> String {
 	output2.push_str(&output[pair1.1..]);
 
     return output2;
+}
+
+fn convert_back_from_preprocess(output: String) -> String {
+	return output
+		.replace("\u{2018}", "'")
+		.replace("\u{2019}", "'")
+		.replace("\u{02BC}", "'")
+		.replace("\u{2014}", "--");
+}
+
+fn trim_end(output: &mut String) {
+	let (i1, i2) = {
+		let mut chars = output.char_indices();
+		let (i2, _) = chars.next_back().unwrap();
+		let (i1, _) = chars.next_back().unwrap();
+		(i1, i2)
+	};
+	output.remove(i2);
+	output.remove(i1);
 }
 
 fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: usize) {
