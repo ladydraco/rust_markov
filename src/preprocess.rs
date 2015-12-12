@@ -3,17 +3,19 @@ use regex::Regex;
 use std::collections::VecDeque;
 
 pub fn preprocess(input: &String) -> String {
-	let contraction_pattern = Regex::new(r"(\w)'(\w)").unwrap();
-	let leftover_pattern    = Regex::new(r"'").unwrap();
-	let dash_pattern        = Regex::new(r"--").unwrap();
+	let contraction_pattern   = Regex::new(r"(\w)'(\w)").unwrap();
+	let leftover_pattern      = Regex::new(r"'").unwrap();
+	let dash_pattern          = Regex::new(r"--").unwrap();
+	let chapter_title_pattern = Regex::new(r"CHAPTER .*\n\n.*").unwrap();
 
 	let text1 = input;
 	let text2 = contraction_pattern.replace_all(&text1, "$1\u{02BC}$2");
 	let text3 = process_quotes(&text2);
 	let text4 = leftover_pattern.replace_all(&text3, "\u{02BC}");
 	let text5 = dash_pattern.replace_all(&text4, "\u{2014}");
+	let text6 = chapter_title_pattern.replace_all(&text5, "\u{1F43B}"); // bear face
 
-	return text5;
+	return text6;
 }
 
 fn process_quotes(input: &String) -> String {

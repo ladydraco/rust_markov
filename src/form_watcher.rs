@@ -9,6 +9,7 @@ pub struct FormWatcher<'a> {
 	current: String,
 	pub current_order: usize,
 	saw_possible_form_space: bool,
+	is_within_form_sequence: bool,
 }
 
 impl<'a> FormWatcher<'a> {
@@ -19,6 +20,7 @@ impl<'a> FormWatcher<'a> {
 			current: String::new(),
 			current_order: 0,
 			saw_possible_form_space: false,
+			is_within_form_sequence: false,
 		}
 	}
 
@@ -28,6 +30,7 @@ impl<'a> FormWatcher<'a> {
 
 		self.current_order = target.current_order;
 		self.saw_possible_form_space = target.saw_possible_form_space;
+		self.is_within_form_sequence = target.is_within_form_sequence;
 	}
 
 	pub fn watch(&mut self, next_char: char) -> (usize, bool) {
@@ -41,6 +44,7 @@ impl<'a> FormWatcher<'a> {
 				changed = true;
 			}
 			self.saw_possible_form_space = false;
+			self.is_within_form_sequence = false;
 		} else {
 			if next_char == ' ' && last.is_some() && last.unwrap() == 'x' {
 				self.saw_possible_form_space = true;
@@ -50,6 +54,7 @@ impl<'a> FormWatcher<'a> {
 					self.saw_possible_form_space = false;
 				}
 				self.current.push(next_char);
+				self.is_within_form_sequence = true;
 				changed = true;
 			}
 		}
@@ -67,11 +72,12 @@ impl<'a> FormWatcher<'a> {
 				self.current.remove(0);
 				ord -= 1;
 			}
-			println!("{} {}", self.current, ord);
 		}
 
 		self.current_order = ord;
 
-		return (ord, changed);
+		let report_change = changed && !self.is_within_form_sequence;
+
+		return (ord, report_change);
 	}
 }

@@ -7,6 +7,7 @@ mod gather_stats;
 mod generate_text;
 mod preprocess;
 mod form_watcher;
+mod title_generator;
 
 use std::env;
 use std::process;
@@ -19,6 +20,10 @@ use generate_text::{
 	Generator,
 	pick_random_in_range,
 	};
+use title_generator::{
+	generate_title,
+	generate_author,
+};
 use preprocess::{
 	preprocess,
 	extract_form
@@ -32,12 +37,15 @@ const INPUT_FILE: &'static str = "input/alice.txt";
 const OUTPUT_FILE: &'static str = "output.txt";
 const MIN_ORDER: usize = 3;
 const MAX_ORDER: usize = 6;
-const OUTPUT_CHARS: usize = 1400;
+const OUTPUT_CHARS: usize = 142000;
 const MAX_TRIES: usize = 5;
 const DISTORTION_FACTOR: i32 = 10;
 const FORM_MAX_ORDER: usize = 25;
 
 fn main () {
+	// println!("{}", generate_title());
+	// return;
+
 	let args = parse_arguments();
 	let raw_text = load_book(&args.input_filename);
 
@@ -49,7 +57,7 @@ fn main () {
 
 	// Find "max order" characters that begin a sentence.
 	let mut text_starting_key = String::new();
-	let sentence_ish_starts = Regex::new(r"[A-Z][\wʼ -]{14,}").unwrap();
+	let sentence_ish_starts = Regex::new(r"[A-Z].+").unwrap();
 	let matches = sentence_ish_starts.find_iter(&processed_text).collect::<Vec<_>>();
 	let start_index = pick_random_in_range(0, matches.len() - 1);
 	let start_bounds = matches[start_index];
@@ -84,6 +92,13 @@ fn main () {
 		write_html_header(&mut output, args.lower_order_bound, args.higher_order_bound);
 	}
 
+	output.push_str(&generate_title());
+	output.push_str("\n\n");
+	output.push_str("by ");
+	output.push_str(&generate_author());
+	output.push_str(" \n\n");
+	output.push_str("\u{1F43B}\n\n");
+
 	// Create a form watcher for text:
 	let mut watcher = FormWatcher::new(&form_stats, FORM_MAX_ORDER);
 	let mut worker_watcher = FormWatcher::new(&form_stats, FORM_MAX_ORDER);
@@ -91,7 +106,7 @@ fn main () {
 	let mut text_generator = Generator::new(&text_stats, &args, args.lower_order_bound, args.higher_order_bound);
 	text_generator.start(Some(&text_starting_key));
 	for c in text_starting_key.chars() { 
-		output_char(&mut output, args.use_html, (c, args.higher_order_bound));
+		output_char(&mut output, args.use_html, (c, args.higher_order_bound, 25));
 		watcher.watch(c);
 		output_amount += 1;
 	}
@@ -138,22 +153,70 @@ fn main () {
 
 		if !success {
 			chosen = best;
+			print!("N");
+		} else {
+			print!("Y");
 		}
 
 		text_generator.sync(&workers[chosen].0);
 		watcher.sync(&worker_watcher);
 
 		for item in workers[chosen].1.iter() {
-			output_char(&mut output, args.use_html, (item.0, item.1));
+			output_char(&mut output, args.use_html, *item);
 			output_amount += 1;
+		}
+		if let Some(item) = workers[chosen].1.iter().next_back() {
+			print!(" {}\n", item.2);
 		}
 	}
 
-	output_file(&args.output_filename, &output);
+	let output2 = add_chapter_headings(output);
+
+	output_file(&args.output_filename, &output2);
+}
+
+fn add_chapter_headings(output: String) -> String {
+	let mut chapter_number = 0;
+	let roman_numerals = vec!["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", 
+		                      "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"];
+    let bear_face = "\u{1F43B}";
+    let bear_face_pattern = Regex::new(bear_face).unwrap();
+    let bear_faces = bear_face_pattern.find_iter(&output);
+    let mut pair1: (usize, usize) = (0, 0);
+    let mut pair2: (usize, usize) = (0, 0);
+    let mut output2 = String::new();
+    for pair in bear_faces {
+    	pair2 = pair;
+
+    	output2.push_str(&output[pair1.1..pair2.0]);
+    	output2.push_str("CHAPTER ");
+    	output2.push_str(roman_numerals[chapter_number]);
+    	output2.push_str("\n\n");
+    	output2.push_str(&generate_title());
+    	chapter_number += 1;
+
+    	pair1 = pair2;
+    }
+
+	output2.push_str(&output[pair1.1..]);
+
+    return output2;
 }
 
 fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: usize) {
 	output_buffer.push_str("<meta charset=\"UTF-8\">");
+	output_buffer.push_str(
+		"<script type='text/javascript'>
+			window.onload = function () {
+				var a = document.getElementById('a');
+				document.body.className = 'order';
+				var isForm = false;
+				a.onclick = function () {
+					isForm = !isForm;
+					document.body.className = isForm ? 'form-order' : 'order';
+				}
+			};
+		</script>");
 	output_buffer.push_str("<style type=\"text/css\"> body { white-space: pre-wrap; } ");
 	output_buffer.push_str(".structure-success { background: #ddffdd; } ");
 	for i in min_order..max_order + 1 {
@@ -164,7 +227,29 @@ fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: us
 		let multiplier = c as f64 / a as f64;
 
 		let value = (multiplier * 248.0) as i32;
-		output_buffer.push_str(".order-");
+		output_buffer.push_str("body.order .order-");
+		output_buffer.push_str(&i.to_string());
+		output_buffer.push_str("{ ");
+
+		output_buffer.push_str(" color: rgb(");
+		output_buffer.push_str(&value.to_string());
+		output_buffer.push_str(",");
+		output_buffer.push_str(&value.to_string());
+		output_buffer.push_str(",");
+		output_buffer.push_str(&value.to_string());
+		output_buffer.push_str(");\n");
+
+		output_buffer.push_str("}\n");
+	}
+	for i in 0..FORM_MAX_ORDER + 1 {
+		
+		let a = FORM_MAX_ORDER + 1;
+		let b = i;
+		let c = a - b - 1;
+		let multiplier = c as f64 / a as f64;
+
+		let value = (multiplier * 248.0) as i32;
+		output_buffer.push_str("body.form-order .form-order-");
 		output_buffer.push_str(&i.to_string());
 		output_buffer.push_str("{ ");
 
@@ -179,13 +264,16 @@ fn write_html_header(output_buffer: &mut String, min_order: usize, max_order: us
 		output_buffer.push_str("}\n");
 	}
 	output_buffer.push_str("</style>");
+	output_buffer.push_str("<input type='checkbox' id='a'> Show Form Stats <br/>");
 }
 
-fn output_char(output_buffer: &mut String, use_html: bool, next_output: (char, usize)) {
+fn output_char(output_buffer: &mut String, use_html: bool, next_output: (char, usize, usize)) {
 	if use_html {
 		output_buffer.push_str("<span class=\"");
 		output_buffer.push_str("order-");
 		output_buffer.push_str(&next_output.1.to_string());
+		output_buffer.push_str(" form-order-");
+		output_buffer.push_str(&next_output.2.to_string());
 		output_buffer.push_str("\">");
 	}
 
