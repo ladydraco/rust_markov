@@ -239,7 +239,7 @@ Very soon the Rabbit noticed Alice, as she went hunting about, and called out to
 
 'How queer it seems,' Alice said to herself, 'to be going messages for a rabbit! I suppose Dinah'll be sending me on messages next!' And she began fancying the sort of thing that would happen: '"Miss Alice! Come here directly, and get ready for your walk!" "Coming in a minute, nurse! But I've got to see that the mouse doesn't get out." Only I don't think,' Alice went on, 'that they'd let Dinah stop in the house if it began ordering people about like that!'
 
-By this time she had found her way into a tidy little room with a table in the window, and on it (as she had hoped) a fan and two or three pairs of tiny white kid gloves: she took up the fan and a pair of the gloves, and was just going to leave the room, when her eye fell upon a little bottle that stood near the looking- glass. There was no label this time with the words 'DRINK ME,' but nevertheless she uncorked it and put it to her lips. 'I know something interesting is sure to happen,' she said to herself, 'whenever I eat or drink anything; so I'll just see what this bottle does. I do hope it'll make me grow large again, for really I'm quite tired of being such a tiny little thing!'
+By this time she had found her way into a tidy little room with a table in the window, and on it (as she had hoped) a fan and two or three pairs of tiny white kid gloves: she took up the fan and a pair of the gloves, and was just going to leave the room, when her eye fell upon a little bottle that stood near the looking-glass. There was no label this time with the words 'DRINK ME,' but nevertheless she uncorked it and put it to her lips. 'I know something interesting is sure to happen,' she said to herself, 'whenever I eat or drink anything; so I'll just see what this bottle does. I do hope it'll make me grow large again, for really I'm quite tired of being such a tiny little thing!'
 
 It did so indeed, and much sooner than she had expected: before she had drunk half the bottle, she found her head pressing against the ceiling, and had to stoop to save her neck from being broken. She hastily put down the bottle, saying to herself 'That's quite enough--I hope I shan't grow any more--As it is, I can't get out at the door--I do wish I hadn't drunk quite so much!'
 
@@ -573,7 +573,7 @@ CHORUS
 
 'Here! you may nurse it a bit, if you like!' the Duchess said to Alice, flinging the baby at her as she spoke. 'I must go and get ready to play croquet with the Queen,' and she hurried out of the room. The cook threw a frying-pan after her as she went out, but it just missed her.
 
-Alice caught the baby with some difficulty, as it was a queer- shaped little creature, and held out its arms and legs in all directions, 'just like a star-fish,' thought Alice. The poor little thing was snorting like a steam-engine when she caught it, and kept doubling itself up and straightening itself out again, so that altogether, for the first minute or two, it was as much as she could do to hold it.
+Alice caught the baby with some difficulty, as it was a queer-shaped little creature, and held out its arms and legs in all directions, 'just like a star-fish,' thought Alice. The poor little thing was snorting like a steam-engine when she caught it, and kept doubling itself up and straightening itself out again, so that altogether, for the first minute or two, it was as much as she could do to hold it.
 
 As soon as she had made out the proper way of nursing it, (which was to twist it up into a sort of knot, and then keep tight hold of its right ear and left foot, so as to prevent its undoing itself,) she carried it out into the open air. 'If I don't take this child away with me,' thought Alice, 'they're sure to kill it in a day or two: wouldn't it be murder to leave it behind?' She said the last words out loud, and the little thing grunted in reply (it had left off sneezing by this time). 'Don't grunt,' said Alice; 'that's not at all a proper way of expressing yourself.'
 
@@ -585,7 +585,7 @@ Alice was just beginning to think to herself, 'Now, what am I to do with this cr
 
 So she set the little creature down, and felt quite relieved to see it trot away quietly into the wood. 'If it had grown up,' she said to herself, 'it would have made a dreadfully ugly child: but it makes rather a handsome pig, I think.' And she began thinking over other children she knew, who might do very well as pigs, and was just saying to herself, 'if one only knew the right way to change them--' when she was a little startled by seeing the Cheshire Cat sitting on a bough of a tree a few yards off.
 
-The Cat only grinned when it saw Alice. It looked good- natured, she thought: still it had very long claws and a great many teeth, so she felt that it ought to be treated with respect.
+The Cat only grinned when it saw Alice. It looked good-natured, she thought: still it had very long claws and a great many teeth, so she felt that it ought to be treated with respect.
 
 'Cheshire Puss,' she began, rather timidly, as she did not at all know whether it would like the name: however, it only grinned a little wider. 'Come, it's pleased so far,' thought Alice, and she went on. 'Would you tell me, please, which way I ought to go from here?'
 
@@ -1463,7 +1463,7 @@ All this time the Queen had never left off staring at the Hatter, and, just as t
 
 'Well, at any rate, the Dormouse said--' the Hatter went on, looking anxiously round to see if he would deny it too: but the Dormouse denied nothing, being fast asleep.
 
-'After that,' continued the Hatter, 'I cut some more bread- and-butter--'
+'After that,' continued the Hatter, 'I cut some more bread-and-butter--'
 
 'But what did the Dormouse say?' one of the jury asked.
 

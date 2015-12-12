@@ -182,7 +182,7 @@ pub fn pick_random_in_range<T: NumCast>(start: T, end: T) -> T {
 
 	let multiplier = end_f - start_f + 1.0;
 	let r = rand::random::<f64>();
-	let result = multiplier * r;
+	let result = start_f + (multiplier * r);
 	
 	return num::cast::<f64, T>(result).unwrap();
 }
