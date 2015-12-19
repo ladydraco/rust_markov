@@ -8,22 +8,17 @@ pub struct OrderStats<'a> {
 	pub stats_for_state: HashMap<&'a str, CharChoiceStats>
 }
 
-const USAGE_MULTIPLIER: i32 = 1;
-
 impl<'a> OrderStats<'a> {
 	fn add_stats(&mut self, state: &'a str, next: char) {
-		self.total_usages += 1 * USAGE_MULTIPLIER;
+		self.total_usages += 1;
 
-		if !self.stats_for_state.contains_key(state) {
-			let choice_stats = CharChoiceStats {
+		self.stats_for_state
+			.entry(state)
+			.or_insert_with(|| CharChoiceStats {
 				total_usages: 0,
 				options: HashMap::new()
-			};
-			self.stats_for_state.insert(state, choice_stats);
-		}
-
-		let mut choice_stats = self.stats_for_state.get_mut(state).unwrap();
-		choice_stats.add_option(next);
+			})
+			.add_option(next);
 	}
 }
 
@@ -35,14 +30,11 @@ pub struct CharChoiceStats {
 
 impl CharChoiceStats {
 	fn add_option(&mut self, option: char) {
-		self.total_usages += 1 * USAGE_MULTIPLIER;
+		self.total_usages += 1;
 
-		if !self.options.contains_key(&option) {
-			self.options.insert(option, 0);
-		}
-
-		let mut char_count = self.options.get_mut(&option).unwrap();
-		*char_count += 1 * USAGE_MULTIPLIER;
+		*self.options
+			.entry(option)
+			.or_insert(0) += 1;
 	}
 }
 
@@ -78,20 +70,17 @@ pub fn gather_stats(text: &str, max_order: usize) -> Vec<OrderStats> {
 		}
 
 		// Collect character-level stats for each order:
+		for i in 1..window.len() {
+			// The order is one less than the slice distance of the key
+			// for that order:
+			let ord = i - 1;
 
-		if window.len() > 1 {
-			for i in 1..window.len() {
-				// The order is one less than the slice distance of the key
-				// for that order:
-				let ord = i - 1;
-
-				// Extract a key of length ord:
-				let start = window[i];
-				let end = window[0];
-				let key = &text[start..end];
-				
-				stats[ord].add_stats(key, next_char);
-			}
+			// Extract a key of length ord:
+			let start = window[i];
+			let end = window[0];
+			let key = &text[start..end];
+			
+			stats[ord].add_stats(key, next_char);
 		}
 	}
 
